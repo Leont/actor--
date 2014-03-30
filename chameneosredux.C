@@ -93,14 +93,14 @@ static void broker_func(const actor::actor<message>&, const actor::receiver<mess
 	}
 }
 
-static void cleanup_func(const actor::actor<size_t>&, const actor::receiver<size_t> recv, size_t color_count, actor::queue<size_t>& result) {
+static void cleanup_func(const actor::actor<size_t>&, const actor::receiver<size_t> recv, size_t color_count, std::promise<bool>&& promise) {
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		summary += recv.receive();
 	}
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
-	result.push(summary);
+	promise.set_value(true);
 }
 
 
@@ -127,13 +127,14 @@ static void chameneos_func(const actor::actor<message>& self, const actor::recei
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
 	actor::actor<message> broker(broker_func, count, colors.size());
-	actor::queue<size_t> result;
-	actor::actor<size_t> cleanup(cleanup_func, colors.size(), std::ref(result));
+	std::promise<bool> promise;
+	auto future = promise.get_future();
+	actor::actor<size_t> cleanup(cleanup_func, colors.size(), std::move(promise));
 	std::vector<actor::actor<message>> chameneoses;
 	for (auto color : colors) {
 		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
 	}
-	result.pop();
+	future.wait();
 	return;
 }
 
