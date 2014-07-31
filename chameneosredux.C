@@ -80,7 +80,7 @@ struct message {
 	message(const actor::actor<message>* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
-static void broker_func(const actor::actor<message>&, const actor::receiver<message> recv, size_t meetings_count, size_t color_count) {
+static void broker_func(actor::receiver<message> recv, size_t meetings_count, size_t color_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
 		message left = recv.receive();
 		message right = recv.receive();
@@ -93,20 +93,20 @@ static void broker_func(const actor::actor<message>&, const actor::receiver<mess
 	}
 }
 
-static void cleanup_func(const actor::actor<size_t>&, const actor::receiver<size_t> recv, size_t color_count, std::promise<bool>&& promise) {
+static void cleanup_func(const actor::receiver<size_t> recv, size_t color_count, std::promise<void>& promise) {
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		summary += recv.receive();
 	}
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
-	promise.set_value(true);
+	promise.set_value();
 }
 
-
-static void chameneos_func(const actor::actor<message>& self, const actor::receiver<message>& recv, color start_color, const actor::actor<message>& broker, const actor::actor<size_t> cleanup) {
+static void chameneos_func(const actor::receiver<message>& recv, color start_color, const actor::actor<message>& broker, const actor::actor<size_t> cleanup) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
+	auto self = recv.self();
 	try {
 		while (1) {
 			broker.send(message(&self, current));
@@ -126,13 +126,13 @@ static void chameneos_func(const actor::actor<message>& self, const actor::recei
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	actor::actor<message> broker(broker_func, count, colors.size());
-	std::promise<bool> promise;
+	auto broker = actor::actor<message>::spawn(&broker_func, count, colors.size());
+	std::promise<void> promise;
 	auto future = promise.get_future();
-	actor::actor<size_t> cleanup(cleanup_func, colors.size(), std::move(promise));
+	auto cleanup = actor::actor<size_t>::spawn(cleanup_func, colors.size(), std::ref(promise));
 	std::vector<actor::actor<message>> chameneoses;
 	for (auto color : colors) {
-		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
+		chameneoses.push_back(actor::actor<message>::spawn(chameneos_func, color, broker, cleanup));
 	}
 	future.wait();
 	return;

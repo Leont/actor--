@@ -4,8 +4,6 @@
 #include <queue>
 #include <memory>
 
-#include <iostream>
-
 namespace actor {
 	class death : public std::exception {
 		const char* what() const noexcept {
@@ -28,7 +26,7 @@ namespace actor {
 		}
 		void push(T&& value) {
 			std::lock_guard<std::mutex> lock(mutex);
-			messages.push(value);
+			messages.push(std::move(value));
 			cond.notify_one();
 		}
 		T pop() {
@@ -49,54 +47,76 @@ namespace actor {
 		}
 	};
 
-	template<typename T> class receiver {
-		const std::shared_ptr<queue<T>> mailbox;
+	template<typename T> class receiver;
+
+	template<typename T> class thread {
+		queue<T> mailbox;
+		template<typename U, typename... V> void start(std::shared_ptr<thread<T>>& ptr, U&& u, V&&... params) {
+			std::thread(u, receiver<T>(ptr), params...).detach();
+		}
+		thread() : mailbox() { }
 		public:
-		receiver(const std::shared_ptr<queue<T>>& _mailbox) : mailbox(_mailbox) { }
+		template<typename U, typename... V> static std::weak_ptr<thread<T>> spawn(U&& u, V&&... params) {
+			std::shared_ptr<thread<T>> ret = std::unique_ptr<thread<T>>(new thread<T>());
+			ret->start(ret, std::forward<U>(u), std::forward<V>(params)...);
+			return ret;
+		}
+		const queue<T>& get_mailbox() const {
+			return mailbox;
+		}
+		queue<T>& get_mailbox() {
+			return mailbox;
+		}
+	};
+
+	template<typename T> class actor;
+
+	template<typename T> class receiver {
+		std::shared_ptr<thread<T>> athread;
+		receiver(const std::shared_ptr<thread<T>>& _athread) : athread(_athread) { }
+		friend class thread<T>;
+		public:
 		T receive() const {
-			return mailbox->pop();
+			return athread->get_mailbox().pop();
+		}
+		actor<T> self() const {
+			return actor<T>(athread);
 		}
 	};
 
 	template<typename T> class actor {
-		std::shared_ptr<queue<T>> mailbox_ref;
+		std::weak_ptr<thread<T>> athread;
+		actor(const std::weak_ptr<thread<T>>& other) : athread(other) {}
+		friend class receiver<T>;
 		public:
-		actor(const actor<T>& other) : mailbox_ref(other.mailbox_ref) { }
-		actor(actor<T>&& other) : mailbox_ref(std::move(other.mailbox_ref)) {}
+		actor(const actor<T>& other) : athread(other.athread) { }
+		actor(actor<T>&& other) : athread(std::move(other.athread)) {}
 		actor<T>& operator=(const actor& other) {
-			mailbox_ref = other.mailbox_ref;
+			athread = other.athread;
 		}
 		actor<T>& operator=(actor&& other) {
-			mailbox_ref = std::move(other.mailbox_ref);
+			athread = std::move(other.athread);
 		}
-		//
-		template<typename U, typename... V , typename W = typename std::enable_if<std::is_function<typename std::remove_reference<U>::type>::value>::type> explicit actor(U&& _u, V&&... _params) : mailbox_ref([this](U&& u, V&&... params) {
-			static_assert(!std::is_same<U, receiver<T>>::value, "ERROR");
-			auto mailbox = std::make_shared<queue<T>>();
-			receiver<T> receive(mailbox);
-			std::thread(std::forward<U>(u), *this, receive, std::forward<V>(params)...).detach();
-			return mailbox;
-		}(std::forward<U>(_u), std::forward<V>(_params)...)) {}
+		template<typename U, typename... V> static actor spawn(U&& _u, V&&... _params) {
+			return actor(thread<T>::spawn(std::forward<U>(_u), std::forward<V>(_params)...));
+		}
 		void send(const T& value) const {
-			auto mailbox = mailbox_ref;
-			if (mailbox)
-				mailbox->push(value);
+			auto lthread = athread.lock();
+			if (lthread)
+				lthread->get_mailbox().push(value);
 		}
 		void send(T&& value) const {
-			auto mailbox = mailbox_ref;
-			if (mailbox)
-				mailbox->push(value);
+			auto lthread = athread.lock();
+			if (lthread)
+				lthread->get_mailbox().push(std::move(value));
 		}
 		void kill() const {
-			auto mailbox = mailbox_ref;
-			if (mailbox)
-				mailbox->kill();
+			auto lthread = athread.lock();
+			if (lthread)
+				lthread->get_mailbox().kill();
 		}
 		bool alive() const noexcept {
-			return !mailbox_ref.expired();
+			return !athread.expired();
 		}
 	};
-	template<typename T, typename U, typename... V> actor<T> spawn(U&& u, V&&... params) {
-		return actor<T>(true, std::forward<U>(u), std::forward<V>(params)...);
-	}
 }

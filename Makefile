@@ -1,7 +1,7 @@
 CXX = g++
 ACK = ack-grep
 PERL = perl
-WARNINGS = -Wall -Weffc++ -Wshadow -Wextra
+WARNINGS = -Wall -Weffc++ -Wshadow -Wextra -Wno-unused-parameter
 #DEBUG = -ggdb3 -DDEBUG
 DEBUG=-O3 -flto
 DFLAGS = -fPIC
@@ -39,9 +39,9 @@ chameneosredux: chameneosredux.o
 
 testbuild: $(LIBTAP) $(TEST_GOALS)
 
-test: $(LIB) testbuild 
-	@echo run_tests.pl $(TEST_GOALS)
-	@$(LIBRARY_VAR)=blib ./run_tests.pl $(TEST_GOALS)
+#test: $(LIB) testbuild
+#	@echo run_tests.pl $(TEST_GOALS)
+#	@$(LIBRARY_VAR)=blib ./run_tests.pl $(TEST_GOALS)
 
 clean:
 	-rm -r blib $(wildcard t/*.t) chameneosredux chameneosredux.o 2>/dev/null
