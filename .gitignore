@@ -1,2 +1,4 @@
 .*.sw[po]
 blib/
+*.o
+chameneosredux
