@@ -59,7 +59,7 @@ color operator+(const color &c1, const color &c2) {
 static void show_complements() {
 	for (auto i : { blue, red, yellow }) {
 		for (auto j : { blue, red, yellow }) {
-			std::cout << i << " + " << j << " = " << (i + j) << std::endl;
+			std::cout << i << " + " << j << " -> " << (i + j) << std::endl;
 		}
 	}
 }
@@ -119,7 +119,7 @@ static void chameneos_func(const actor::actor<message>& self, const actor::recei
 	}
 	catch (const actor::death&) {
 		std::lock_guard<std::mutex> lock(output_mutex);
-		std::cout << meetings << " " << met_self << std::endl;
+		std::cout << meetings << " " << spell(met_self) << std::endl;
 		cleanup.send(meetings);
 	}
 }
