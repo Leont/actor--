@@ -126,13 +126,13 @@ static void chameneos_func(const actor::receiver<message>& recv, color start_col
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	auto broker = actor::actor<message>::spawn(&broker_func, count, colors.size());
+	auto broker = actor::actor<message>(&broker_func, count, colors.size());
 	std::promise<void> promise;
 	auto future = promise.get_future();
-	auto cleanup = actor::actor<size_t>::spawn(cleanup_func, colors.size(), std::ref(promise));
+	auto cleanup = actor::actor<size_t>(cleanup_func, colors.size(), std::ref(promise));
 	std::vector<actor::actor<message>> chameneoses;
 	for (auto color : colors) {
-		chameneoses.push_back(actor::actor<message>::spawn(chameneos_func, color, broker, cleanup));
+		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
 	}
 	future.wait();
 	return;

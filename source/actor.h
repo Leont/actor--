@@ -52,12 +52,12 @@ namespace actor {
 	template<typename T> class thread {
 		queue<T> mailbox;
 		template<typename U, typename... V> void start(std::shared_ptr<thread<T>>& ptr, U&& u, V&&... params) {
-			std::thread(u, receiver<T>(ptr), params...).detach();
+			std::thread(std::forward<U>(u), receiver<T>(ptr), std::forward<V>(params)...).detach();
 		}
-		thread() : mailbox() { }
 		public:
+		thread() : mailbox() { }
 		template<typename U, typename... V> static std::weak_ptr<thread<T>> spawn(U&& u, V&&... params) {
-			std::shared_ptr<thread<T>> ret = std::unique_ptr<thread<T>>(new thread<T>());
+			auto ret = std::make_shared<thread<T>>();
 			ret->start(ret, std::forward<U>(u), std::forward<V>(params)...);
 			return ret;
 		}
@@ -86,10 +86,11 @@ namespace actor {
 
 	template<typename T> class actor {
 		std::weak_ptr<thread<T>> athread;
-		actor(const std::weak_ptr<thread<T>>& other) : athread(other) {}
+		actor(const std::shared_ptr<thread<T>>& other) : athread(other) {}
 		friend class receiver<T>;
 		public:
 		actor(const actor<T>& other) : athread(other.athread) { }
+		actor(actor<T>& other) : athread(other.athread) { }
 		actor(actor<T>&& other) : athread(std::move(other.athread)) {}
 		actor<T>& operator=(const actor& other) {
 			athread = other.athread;
@@ -97,8 +98,7 @@ namespace actor {
 		actor<T>& operator=(actor&& other) {
 			athread = std::move(other.athread);
 		}
-		template<typename U, typename... V> static actor spawn(U&& _u, V&&... _params) {
-			return actor(thread<T>::spawn(std::forward<U>(_u), std::forward<V>(_params)...));
+		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : athread(thread<T>::spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
 		}
 		void send(const T& value) const {
 			auto lthread = athread.lock();
