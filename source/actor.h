@@ -14,17 +14,17 @@ namespace actor {
 		std::mutex mutex;
 		std::condition_variable cond;
 		std::queue<T> messages;
+		bool killed = false;
 		queue(const queue&) = delete;
 		queue<T>& operator=(const queue<T>&) = delete;
-		bool killed = false;
 		public:
-		queue() : mutex(), cond(), messages() { };
-		void push(const T& value) {
+		queue() noexcept : mutex(), cond(), messages() { };
+		void push(const T& value) noexcept(noexcept(T(value))) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(value);
 			cond.notify_one();
 		}
-		void push(T&& value) {
+		void push(T&& value) noexcept(noexcept(T(std::move(value)))) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(std::move(value));
 			cond.notify_one();
@@ -36,87 +36,77 @@ namespace actor {
 					throw death();
 				cond.wait(lock);
 			}
-			T ret = messages.front();
+			T ret = std::move(messages.front());
 			messages.pop();
-			return ret;
+			return std::move(ret);
 		}
-		void kill() {
+		void kill() noexcept {
 			std::lock_guard<std::mutex> lock(mutex);
 			killed = true;
-			cond.notify_one();
+			cond.notify_all();
 		}
-	};
-
-	template<typename T> class receiver;
-
-	template<typename T> class thread {
-		queue<T> mailbox;
-		template<typename U, typename... V> void start(std::shared_ptr<thread<T>>& ptr, U&& u, V&&... params) {
-			std::thread(std::forward<U>(u), receiver<T>(ptr), std::forward<V>(params)...).detach();
-		}
-		public:
-		thread() : mailbox() { }
-		template<typename U, typename... V> static std::weak_ptr<thread<T>> spawn(U&& u, V&&... params) {
-			auto ret = std::make_shared<thread<T>>();
-			ret->start(ret, std::forward<U>(u), std::forward<V>(params)...);
-			return ret;
-		}
-		const queue<T>& get_mailbox() const {
-			return mailbox;
-		}
-		queue<T>& get_mailbox() {
-			return mailbox;
+		bool alive() const noexcept {
+			return !killed;
 		}
 	};
 
 	template<typename T> class actor;
 
 	template<typename T> class receiver {
-		std::shared_ptr<thread<T>> athread;
-		receiver(const std::shared_ptr<thread<T>>& _athread) : athread(_athread) { }
-		friend class thread<T>;
+		std::shared_ptr<queue<T>> aqueue;
+		explicit receiver(const std::shared_ptr<queue<T>>& _aqueue) noexcept : aqueue(_aqueue) { }
+		friend class actor<T>;
 		public:
 		T receive() const {
-			return athread->get_mailbox().pop();
+			return aqueue->pop();
 		}
-		actor<T> self() const {
-			return actor<T>(athread);
+		actor<T> self() const noexcept {
+			return actor<T>(aqueue);
 		}
 	};
 
 	template<typename T> class actor {
-		std::weak_ptr<thread<T>> athread;
-		actor(const std::shared_ptr<thread<T>>& other) : athread(other) {}
+		std::weak_ptr<queue<T>> aqueue;
+		explicit actor(const std::shared_ptr<queue<T>>& other) noexcept : aqueue(other) {}
+		template<typename U, typename... V> static std::weak_ptr<queue<T>> spawn(U&& u, V&&... params) {
+			auto ret = std::make_shared<queue<T>>();
+			std::thread(std::forward<U>(u), receiver<T>(ret), std::forward<V>(params)...).detach();
+			return ret;
+		}
 		friend class receiver<T>;
 		public:
-		actor(const actor<T>& other) : athread(other.athread) { }
-		actor(actor<T>& other) : athread(other.athread) { }
-		actor(actor<T>&& other) : athread(std::move(other.athread)) {}
-		actor<T>& operator=(const actor& other) {
-			athread = other.athread;
+		actor(const actor<T>& other) noexcept : aqueue(other.aqueue) { }
+		actor(actor<T>& other) noexcept : aqueue(other.aqueue) { }
+		actor(actor<T>&& other) noexcept : aqueue(std::move(other.aqueue)) { }
+		actor<T>& operator=(const actor& other) noexcept {
+			aqueue = other.aqueue;
 		}
-		actor<T>& operator=(actor&& other) {
-			athread = std::move(other.athread);
+		actor<T>& operator=(actor&& other) noexcept {
+			aqueue = std::move(other.aqueue);
 		}
-		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : athread(thread<T>::spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
+		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : aqueue(spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
 		}
-		void send(const T& value) const {
-			auto lthread = athread.lock();
-			if (lthread)
-				lthread->get_mailbox().push(value);
+		void send(const T& value) const noexcept(noexcept(T(value))) {
+			auto lqueue = aqueue.lock();
+			if (lqueue)
+				lqueue->push(value);
 		}
-		void send(T&& value) const {
-			auto lthread = athread.lock();
-			if (lthread)
-				lthread->get_mailbox().push(std::move(value));
+		void send(T&& value) const noexcept(noexcept(T(std::move(value)))) {
+			auto lqueue = aqueue.lock();
+			if (lqueue)
+				lqueue->push(std::move(value));
 		}
-		void kill() const {
-			auto lthread = athread.lock();
-			if (lthread)
-				lthread->get_mailbox().kill();
+		void kill() const noexcept {
+			auto lqueue = aqueue.lock();
+			if (lqueue)
+				lqueue->kill();
 		}
 		bool alive() const noexcept {
-			return !athread.expired();
+			auto lqueue = aqueue.lock();
+			return lqueue ? lqueue->alive() : false;
+		}
+		bool zombie() const noexcept {
+			return aqueue.expired();
 		}
 	};
 }
