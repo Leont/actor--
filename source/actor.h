@@ -31,10 +31,12 @@ namespace actor {
 		}
 		T pop() {
 			std::unique_lock<std::mutex> lock(mutex);
+			if (killed)
+				throw death();
 			while (messages.empty()) {
+				cond.wait(lock);
 				if (killed)
 					throw death();
-				cond.wait(lock);
 			}
 			T ret = std::move(messages.front());
 			messages.pop();
