@@ -14,11 +14,11 @@ namespace actor {
 		std::mutex mutex;
 		std::condition_variable cond;
 		std::queue<T> messages;
-		bool killed = false;
+		std::atomic<bool> kill_flag;
 		queue(const queue&) = delete;
 		queue<T>& operator=(const queue<T>&) = delete;
 		public:
-		queue() noexcept : mutex(), cond(), messages() { };
+		queue() noexcept : mutex(), cond(), messages(), kill_flag(false) { };
 		void push(const T& value) noexcept(noexcept(T(value))) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(value);
@@ -31,11 +31,11 @@ namespace actor {
 		}
 		T pop() {
 			std::unique_lock<std::mutex> lock(mutex);
-			if (killed)
+			if (kill_flag)
 				throw death();
 			while (messages.empty()) {
 				cond.wait(lock);
-				if (killed)
+				if (kill_flag)
 					throw death();
 			}
 			T ret = std::move(messages.front());
@@ -44,11 +44,11 @@ namespace actor {
 		}
 		void kill() noexcept {
 			std::lock_guard<std::mutex> lock(mutex);
-			killed = true;
+			kill_flag = true;
 			cond.notify_all();
 		}
-		bool alive() const noexcept {
-			return !killed;
+		bool killed() const noexcept {
+			return kill_flag;
 		}
 	};
 
@@ -103,9 +103,9 @@ namespace actor {
 			if (lqueue)
 				lqueue->kill();
 		}
-		bool alive() const noexcept {
+		bool killed() const noexcept {
 			auto lqueue = aqueue.lock();
-			return lqueue ? lqueue->alive() : false;
+			return lqueue ? lqueue->killed() : true;
 		}
 		bool zombie() const noexcept {
 			return aqueue.expired();
