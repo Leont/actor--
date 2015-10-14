@@ -51,21 +51,21 @@ namespace actor {
 	template<typename T> class actor;
 
 	template<typename T> class receiver {
-		std::shared_ptr<queue<T>> aqueue;
-		explicit receiver(const std::shared_ptr<queue<T>>& _aqueue) noexcept : aqueue(_aqueue) { }
+		std::shared_ptr<queue<T>> my_queue;
+		explicit receiver(const std::shared_ptr<queue<T>>& _my_queue) noexcept : my_queue(_my_queue) { }
 		friend class actor<T>;
 		public:
 		T receive() const {
-			return aqueue->pop();
+			return my_queue->pop();
 		}
 		actor<T> self() const noexcept {
-			return actor<T>(aqueue);
+			return actor<T>(my_queue);
 		}
 	};
 
 	template<typename T> class actor {
-		std::weak_ptr<queue<T>> aqueue;
-		explicit actor(const std::shared_ptr<queue<T>>& other) noexcept : aqueue(other) {}
+		std::weak_ptr<queue<T>> weak_queue;
+		explicit actor(const std::shared_ptr<queue<T>>& other) noexcept : weak_queue(other) {}
 		template<typename U, typename... V> static std::weak_ptr<queue<T>> spawn(U&& u, V&&... params) {
 			auto ret = std::make_shared<queue<T>>();
 			std::thread(std::forward<U>(u), receiver<T>(ret), std::forward<V>(params)...).detach();
@@ -73,38 +73,38 @@ namespace actor {
 		}
 		friend class receiver<T>;
 		public:
-		actor(const actor<T>& other) noexcept : aqueue(other.aqueue) { }
-		actor(actor<T>& other) noexcept : aqueue(other.aqueue) { }
-		actor(actor<T>&& other) noexcept : aqueue(std::move(other.aqueue)) { }
+		actor(const actor<T>& other) noexcept : weak_queue(other.weak_queue) { }
+		actor(actor<T>& other) noexcept : weak_queue(other.weak_queue) { }
+		actor(actor<T>&& other) noexcept : weak_queue(std::move(other.weak_queue)) { }
 		actor<T>& operator=(const actor& other) noexcept {
-			aqueue = other.aqueue;
+			weak_queue = other.weak_queue;
 		}
 		actor<T>& operator=(actor&& other) noexcept {
-			aqueue = std::move(other.aqueue);
+			weak_queue = std::move(other.weak_queue);
 		}
-		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : aqueue(spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
+		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : weak_queue(spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
 		}
 		void send(const T& value) const noexcept(noexcept(T(value))) {
-			auto lqueue = aqueue.lock();
-			if (lqueue)
-				lqueue->push(value);
+			auto strong_queue = weak_queue.lock();
+			if (strong_queue)
+				strong_queue->push(value);
 		}
 		void send(T&& value) const noexcept(noexcept(T(std::move(value)))) {
-			auto lqueue = aqueue.lock();
-			if (lqueue)
-				lqueue->push(std::move(value));
+			auto strong_queue = weak_queue.lock();
+			if (strong_queue)
+				strong_queue->push(std::move(value));
 		}
 		void kill() const noexcept {
-			auto lqueue = aqueue.lock();
-			if (lqueue)
-				lqueue->kill();
+			auto strong_queue = weak_queue.lock();
+			if (strong_queue)
+				strong_queue->kill();
 		}
 		bool killed() const noexcept {
-			auto lqueue = aqueue.lock();
-			return lqueue ? lqueue->killed() : true;
+			auto strong_queue = weak_queue.lock();
+			return strong_queue ? strong_queue->killed() : true;
 		}
 		bool zombie() const noexcept {
-			return aqueue.expired();
+			return weak_queue.expired();
 		}
 	};
 }
