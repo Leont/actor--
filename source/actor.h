@@ -36,7 +36,7 @@ namespace actor {
 				throw death();
 			T ret = std::move(messages.front());
 			messages.pop();
-			return std::move(ret);
+			return ret;
 		}
 		void kill() noexcept {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -73,15 +73,9 @@ namespace actor {
 		}
 		friend class receiver<T>;
 		public:
-		actor(const actor<T>& other) noexcept : weak_queue(other.weak_queue) { }
-		actor(actor<T>& other) noexcept : weak_queue(other.weak_queue) { }
-		actor(actor<T>&& other) noexcept : weak_queue(std::move(other.weak_queue)) { }
-		actor<T>& operator=(const actor& other) noexcept {
-			weak_queue = other.weak_queue;
-		}
-		actor<T>& operator=(actor&& other) noexcept {
-			weak_queue = std::move(other.weak_queue);
-		}
+		actor(const actor<T>& other) noexcept = default;
+		actor(actor<T>& other) noexcept = default;
+		actor(actor<T>&& other) noexcept = default;
 		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : weak_queue(spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
 		}
 		void send(const T& value) const noexcept(noexcept(T(value))) {
