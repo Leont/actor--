@@ -76,7 +76,7 @@ namespace actor {
 		actor(const actor<T>& other) noexcept = default;
 		actor(actor<T>& other) noexcept = default;
 		actor(actor<T>&& other) noexcept = default;
-		template<typename U, typename... V> explicit actor(U&& _u, V&&... _params) : weak_queue(spawn(std::forward<U>(_u), std::forward<V>(_params)...)) {
+		template<typename... U> explicit actor(U&&... _u) : weak_queue(spawn(std::forward<U>(_u)...)) {
 		}
 		void send(const T& value) const noexcept(noexcept(T(value))) {
 			auto strong_queue = weak_queue.lock();
