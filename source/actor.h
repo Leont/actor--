@@ -18,13 +18,13 @@ namespace actor {
 		queue(const queue&) = delete;
 		queue<T>& operator=(const queue<T>&) = delete;
 		public:
-		queue() noexcept : mutex(), cond(), messages(), kill_flag(false) { };
-		void push(const T& value) noexcept(noexcept(T(value))) {
+		queue() : mutex(), cond(), messages(), kill_flag(false) { };
+		void push(const T& value) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(value);
 			cond.notify_one();
 		}
-		void push(T&& value) noexcept(noexcept(T(std::move(value)))) {
+		void push(T&& value) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(std::move(value));
 			cond.notify_one();
@@ -38,7 +38,7 @@ namespace actor {
 			messages.pop();
 			return ret;
 		}
-		void kill() noexcept {
+		void kill() {
 			std::lock_guard<std::mutex> lock(mutex);
 			kill_flag = true;
 			cond.notify_all();
@@ -76,17 +76,17 @@ namespace actor {
 		actor(actor<T>& other) noexcept = default;
 		actor(actor<T>&& other) noexcept = default;
 		template<typename... U> explicit actor(U&&... _u) : actor(spawn(std::forward<U>(_u)...)) { }
-		void send(const T& value) const noexcept(noexcept(T(value))) {
+		void send(const T& value) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
 				strong_queue->push(value);
 		}
-		void send(T&& value) const noexcept(noexcept(T(std::move(value)))) {
+		void send(T&& value) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
 				strong_queue->push(std::move(value));
 		}
-		void kill() const noexcept {
+		void kill() const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
 				strong_queue->kill();
