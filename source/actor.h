@@ -98,5 +98,8 @@ namespace actor {
 		bool zombie() const noexcept {
 			return weak_queue.expired();
 		}
+		friend void swap(actor<T>& left, actor<T>& right) noexcept {
+			swap(left.weak_queue, right.weak_queue);
+		}
 	};
 }
