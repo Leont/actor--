@@ -51,8 +51,7 @@ namespace actor {
 	template<typename T> class actor;
 
 	template<typename T> class receiver {
-		std::shared_ptr<queue<T>> my_queue;
-		explicit receiver(const std::shared_ptr<queue<T>>& _my_queue) noexcept : my_queue(_my_queue) { }
+		std::shared_ptr<queue<T>> my_queue = std::make_shared<queue<T>>();
 		friend class actor<T>;
 		public:
 		T receive() const {
@@ -66,18 +65,17 @@ namespace actor {
 	template<typename T> class actor {
 		std::weak_ptr<queue<T>> weak_queue;
 		explicit actor(const std::shared_ptr<queue<T>>& other) noexcept : weak_queue(other) {}
-		template<typename U, typename... V> static std::weak_ptr<queue<T>> spawn(U&& u, V&&... params) {
-			auto ret = std::make_shared<queue<T>>();
-			std::thread(std::forward<U>(u), receiver<T>(ret), std::forward<V>(params)...).detach();
-			return ret;
+		template<typename U, typename... V> static actor<T> spawn(U&& u, V&&... params) {
+			receiver<T> ret;
+			std::thread(std::forward<U>(u), ret, std::forward<V>(params)...).detach();
+			return ret.self();
 		}
 		friend class receiver<T>;
 		public:
 		actor(const actor<T>& other) noexcept = default;
 		actor(actor<T>& other) noexcept = default;
 		actor(actor<T>&& other) noexcept = default;
-		template<typename... U> explicit actor(U&&... _u) : weak_queue(spawn(std::forward<U>(_u)...)) {
-		}
+		template<typename... U> explicit actor(U&&... _u) : actor(spawn(std::forward<U>(_u)...)) { }
 		void send(const T& value) const noexcept(noexcept(T(value))) {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
