@@ -48,34 +48,35 @@ namespace actor {
 		}
 	};
 
-	template<typename T> class actor;
+	template<typename T> class handle;
 
 	template<typename T> class receiver {
 		std::shared_ptr<queue<T>> my_queue = std::make_shared<queue<T>>();
-		friend class actor<T>;
+		friend class handle<T>;
 		public:
 		T receive() const {
 			return my_queue->pop();
 		}
-		actor<T> self() const noexcept {
-			return actor<T>(my_queue);
+		handle<T> self() const noexcept {
+			return handle<T>(my_queue);
 		}
 	};
 
-	template<typename T> class actor {
+	template<typename T, typename U, typename... V> static handle<T> spawn(U&& u, V&&... params) {
+		receiver<T> ret;
+		std::thread(std::forward<U>(u), ret, std::forward<V>(params)...).detach();
+		return ret.self();
+	}
+
+	template<typename T> class handle {
 		std::weak_ptr<queue<T>> weak_queue;
-		explicit actor(const std::shared_ptr<queue<T>>& other) noexcept : weak_queue(other) {}
-		template<typename U, typename... V> static actor<T> spawn(U&& u, V&&... params) {
-			receiver<T> ret;
-			std::thread(std::forward<U>(u), ret, std::forward<V>(params)...).detach();
-			return ret.self();
-		}
+		explicit handle(const std::shared_ptr<queue<T>>& other) noexcept : weak_queue(other) {}
 		friend class receiver<T>;
 		public:
-		actor(const actor<T>& other) noexcept = default;
-		actor(actor<T>& other) noexcept = default;
-		actor(actor<T>&& other) noexcept = default;
-		template<typename... U> explicit actor(U&&... _u) : actor(spawn(std::forward<U>(_u)...)) { }
+		handle(const handle<T>& other) noexcept = default;
+		handle(handle<T>& other) noexcept = default;
+		handle(handle<T>&& other) noexcept = default;
+		template<typename... U> explicit handle(U&&... _u) : handle(spawn<T>(std::forward<U>(_u)...)) { }
 		void send(const T& value) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
@@ -98,7 +99,7 @@ namespace actor {
 		bool zombie() const noexcept {
 			return weak_queue.expired();
 		}
-		friend void swap(actor<T>& left, actor<T>& right) noexcept {
+		friend void swap(handle<T>& left, handle<T>& right) noexcept {
 			swap(left.weak_queue, right.weak_queue);
 		}
 	};

@@ -25,6 +25,8 @@ enum color { blue = 0, red, yellow };
 
 // stream operator to write a color
 
+using namespace actor;
+
 static std::ostream& operator<<(std::ostream &s, const color &c ) {
    static const char *names[] = { "blue", "red", "yellow" };
    s << names[c];
@@ -71,12 +73,12 @@ static void print_header(std::initializer_list<color> colors) {
 }
 
 struct message {
-	const actor::actor<message>* chameneos;
+	const handle<message>* chameneos;
 	const color colour;
-	message(const actor::actor<message>* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
+	message(const handle<message>* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
-static void broker_func(actor::receiver<message> recv, size_t meetings_count, size_t color_count) {
+static void broker_func(receiver<message> recv, size_t meetings_count, size_t color_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
 		message left = recv.receive();
 		message right = recv.receive();
@@ -89,7 +91,7 @@ static void broker_func(actor::receiver<message> recv, size_t meetings_count, si
 	}
 }
 
-static void cleanup_func(const actor::receiver<size_t> recv, size_t color_count, std::promise<void>& promise) {
+static void cleanup_func(const receiver<size_t> recv, size_t color_count, std::promise<void>& promise) {
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		summary += recv.receive();
@@ -99,7 +101,7 @@ static void cleanup_func(const actor::receiver<size_t> recv, size_t color_count,
 	promise.set_value();
 }
 
-static void chameneos_func(const actor::receiver<message>& recv, color start_color, const actor::actor<message>& broker, const actor::actor<size_t> cleanup) {
+static void chameneos_func(const receiver<message>& recv, color start_color, const handle<message>& broker, const handle<size_t> cleanup) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
 	auto self = recv.self();
@@ -113,7 +115,7 @@ static void chameneos_func(const actor::receiver<message>& recv, color start_col
 				met_self++;
 		}
 	}
-	catch (const actor::death&) {
+	catch (const death&) {
 		std::lock_guard<std::mutex> lock(output_mutex);
 		std::cout << meetings << " " << spell(met_self) << std::endl;
 		cleanup.send(meetings);
@@ -122,14 +124,13 @@ static void chameneos_func(const actor::receiver<message>& recv, color start_col
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	auto broker = actor::actor<message>(&broker_func, count, colors.size());
+	auto broker = spawn<message>(broker_func, count, colors.size());
 	std::promise<void> promise;
 	auto future = promise.get_future();
-	auto cleanup = actor::actor<size_t>(cleanup_func, colors.size(), std::ref(promise));
-	std::vector<actor::actor<message>> chameneoses;
-	for (auto color : colors) {
+	auto cleanup = spawn<size_t>(cleanup_func, colors.size(), std::ref(promise));
+	std::vector<handle<message>> chameneoses;
+	for (auto color : colors)
 		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
-	}
 	future.wait();
 	return;
 }
