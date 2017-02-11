@@ -4,8 +4,8 @@
 #include <future>
 #include "source/actor.h"
 
-std::string spell(int n) {
-	static std::string numbers[] = {
+static std::string spell(size_t n) {
+	static const std::string numbers[] = {
 	   " zero", " one", " two",
 	   " three", " four", " five",
 	   " six", " seven", " eight",
@@ -25,33 +25,29 @@ enum color { blue = 0, red, yellow };
 
 // stream operator to write a color
 
-std::ostream& operator<<(std::ostream &s, const color &c ) {
+static std::ostream& operator<<(std::ostream &s, const color &c ) {
    static const char *names[] = { "blue", "red", "yellow" };
    s << names[c];
    return s;
 }
 
-color operator+(const color &c1, const color &c2) {
+static color operator+(const color &c1, const color &c2) {
    switch ( c1 ) {
       case blue: switch ( c2 ) {
          case blue:   return blue;
          case red:    return yellow;
          case yellow: return red;
-         default:;
       }
       case red: switch ( c2 ) {
          case blue:   return yellow;
          case red:    return red;
          case yellow: return blue;
-         default:;
       }
       case yellow: switch ( c2 ) {
          case blue:   return red;
          case red:    return blue;
          case yellow: return yellow;
-         default:;
       }
-      default:;
    }
    throw "Invalid";
 }
@@ -66,7 +62,7 @@ static void show_complements() {
 
 static std::mutex output_mutex;
 
-void print_header(std::initializer_list<color> colors) {
+static void print_header(std::initializer_list<color> colors) {
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << std::endl;
 	for (auto i : colors)

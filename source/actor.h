@@ -18,7 +18,7 @@ namespace actor {
 		queue(const queue&) = delete;
 		queue<T>& operator=(const queue<T>&) = delete;
 		public:
-		queue() : mutex(), cond(), messages(), kill_flag(false) { };
+		queue() : mutex(), cond(), messages(), kill_flag(false) { }
 		void push(const T& value) {
 			std::lock_guard<std::mutex> lock(mutex);
 			messages.push(value);
