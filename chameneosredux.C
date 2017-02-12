@@ -73,42 +73,42 @@ static void print_header(std::initializer_list<color> colors) {
 }
 
 struct message {
-	const handle<message>* chameneos;
+	const handle* chameneos;
 	const color colour;
-	message(const handle<message>* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
+	message(const handle* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
-static void broker_func(receiver<message> recv, size_t meetings_count, size_t color_count) {
+static void broker_func(receiver recv, size_t meetings_count, size_t color_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		message left = recv.receive();
-		message right = recv.receive();
+		message left = recv.receive<message>();
+		message right = recv.receive<message>();
 		left.chameneos->send(right);
 		right.chameneos->send(left);
 	}
 	for (auto i = 0u; i < color_count; ++i) {
-		message last = recv.receive();
+		message last = recv.receive<message>();
 		last.chameneos->kill();
 	}
 }
 
-static void cleanup_func(const receiver<size_t> recv, size_t color_count, std::promise<void>& promise) {
+static void cleanup_func(const receiver recv, size_t color_count, std::promise<void>& promise) {
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
-		summary += recv.receive();
+		summary += recv.receive<size_t>();
 	}
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
 	promise.set_value();
 }
 
-static void chameneos_func(const receiver<message>& recv, color start_color, const handle<message>& broker, const handle<size_t> cleanup) {
+static void chameneos_func(const receiver& recv, color start_color, const handle& broker, const handle cleanup) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
 	auto self = recv.self();
 	try {
 		while (1) {
 			broker.send(message(&self, current));
-			message tmp = recv.receive();
+			message tmp = recv.receive<message>();
 			meetings++;
 			current = current + tmp.colour;
 			if (tmp.chameneos == &self)
@@ -124,11 +124,11 @@ static void chameneos_func(const receiver<message>& recv, color start_color, con
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	auto broker = spawn<message>(broker_func, count, colors.size());
+	auto broker = spawn(broker_func, count, colors.size());
 	std::promise<void> promise;
 	auto future = promise.get_future();
-	auto cleanup = spawn<size_t>(cleanup_func, colors.size(), std::ref(promise));
-	std::vector<handle<message>> chameneoses;
+	auto cleanup = spawn(cleanup_func, colors.size(), std::ref(promise));
+	std::vector<handle> chameneoses;
 	for (auto color : colors)
 		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
 	future.wait();
