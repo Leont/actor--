@@ -78,35 +78,34 @@ struct message {
 	message(const handle* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
-static void broker_func(receiver recv, size_t meetings_count, size_t color_count, std::promise<void>& promise) {
+static void broker(size_t meetings_count, size_t color_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		message left = recv.receive<message>();
-		message right = recv.receive<message>();
+		message left = receive<message>();
+		message right = receive<message>();
 		left.chameneos->send(right);
 		right.chameneos->send(left);
 	}
 	for (auto i = 0u; i < color_count; ++i) {
-		message last = recv.receive<message>();
+		message last = receive<message>();
 		last.chameneos->kill();
 	}
 
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
-		summary += recv.receive<size_t>();
+		summary += receive<size_t>();
 	}
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
-	promise.set_value();
 }
 
-static void chameneos_func(const receiver& recv, color start_color, const handle& broker) {
+static void chameneos(color start_color, const handle& broker) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
-	auto self = recv.self();
+	auto self = actor::self();
 	try {
 		while (1) {
 			broker.send(message(&self, current));
-			message tmp = recv.receive<message>();
+			message tmp = receive<message>();
 			meetings++;
 			current = current + tmp.colour;
 			if (tmp.chameneos == &self)
@@ -122,13 +121,10 @@ static void chameneos_func(const receiver& recv, color start_color, const handle
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	std::promise<void> promise;
-	auto future = promise.get_future();
-	auto broker = spawn(broker_func, count, colors.size(), std::ref(promise));
 	std::vector<handle> chameneoses;
 	for (auto color : colors)
-		chameneoses.push_back(spawn(chameneos_func, color, broker));
-	future.wait();
+		chameneoses.push_back(spawn(chameneos, color, self()));
+	broker(count, colors.size());
 	return;
 }
 

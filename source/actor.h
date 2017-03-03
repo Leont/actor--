@@ -46,8 +46,8 @@ namespace actor {
 		}
 		template<typename T> T pop() {
 			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (current->type() == typeid(T)) {
-					T ret = std::any_cast<T>(*current);
+				if (T* tmp = std::any_cast<T>(&*current)) {
+					T ret = std::move(*tmp);
 					pending.erase(current);
 					return ret;
 				}
@@ -57,10 +57,10 @@ namespace actor {
 				cond.wait(lock, [&] { return kill_flag || !incoming.empty(); });
 				if (kill_flag)
 					throw death();
-				if (incoming.front().type() == typeid(T)) {
-					std::any container = std::move(incoming.front());
+				if (T* tmp = std::any_cast<T>(&incoming.front())) {
+					T ret = std::move(*tmp);
 					incoming.pop();
-					return std::any_cast<T>(container);
+					return ret;
 				}
 				else {
 					pending.push_back(std::move(incoming.front()));
@@ -78,23 +78,10 @@ namespace actor {
 		}
 	};
 
-	class handle;
-
-	class receiver {
-		std::shared_ptr<queue> my_queue = std::make_shared<queue>();
-		friend class handle;
-		public:
-		template<typename T> T receive() const {
-			return my_queue->pop<T>();
-		}
-		handle self() const noexcept;
-	};
-
 	class handle {
 		std::weak_ptr<queue> weak_queue;
-		explicit handle(const std::shared_ptr<queue>& other) noexcept : weak_queue(other) {}
-		friend class receiver;
 		public:
+		explicit handle(const std::shared_ptr<queue>& other) noexcept : weak_queue(other) {}
 		handle(const handle& other) noexcept = default;
 		handle(handle& other) noexcept = default;
 		handle(handle&& other) noexcept = default;
@@ -125,13 +112,24 @@ namespace actor {
 		}
 	};
 
-	template<typename U, typename... V> static handle spawn(U&& u, V&&... params) {
-		receiver ret;
-		std::thread(std::forward<U>(u), ret, std::forward<V>(params)...).detach();
-		return ret.self();
+	namespace {
+		thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
+	}
+	handle self() {
+		return handle(mailbox);
 	}
 
-	inline handle receiver::self() const noexcept {
-		return handle(my_queue);
+	template<typename T> T receive() {
+		return mailbox->pop<T>();
+	}
+
+	template<typename U, typename... V> static handle spawn(U&& func, V&&... params) {
+		auto mail = std::make_shared<queue>();
+		auto callback = [mail, func=std::forward<U>(func), params...]() {
+			mailbox = mail;
+			func(params...);
+		};
+		std::thread(callback).detach();
+		return handle(mail);
 	}
 }
