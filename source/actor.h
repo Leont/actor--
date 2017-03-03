@@ -12,12 +12,6 @@ namespace std {
 }
 
 namespace actor {
-	class death : public std::exception {
-		const char* what() const noexcept {
-			return "Actor terminated";
-		}
-	};
-
 	namespace {
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
 		};
@@ -56,7 +50,6 @@ namespace actor {
 		std::condition_variable cond;
 		std::queue<std::any> incoming;
 		std::list<std::any> pending;
-		std::atomic<bool> kill_flag;
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
 		public:
@@ -65,7 +58,6 @@ namespace actor {
 		, cond()
 		, incoming()
 		, pending()
-		, kill_flag(false)
 		{ }
 		template<typename T> void push(const T& value) {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -87,9 +79,7 @@ namespace actor {
 			}
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
-				cond.wait(lock, [&] { return kill_flag || !incoming.empty(); });
-				if (kill_flag)
-					throw death();
+				cond.wait(lock, [&] { return !incoming.empty(); });
 				if (T* tmp = std::any_cast<T>(&incoming.front())) {
 					T ret = std::move(*tmp);
 					incoming.pop();
@@ -112,9 +102,7 @@ namespace actor {
 			}
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
-				cond.wait(lock, [&] { return kill_flag || !incoming.empty(); });
-				if (kill_flag)
-					throw death();
+				cond.wait(lock, [&] { return !incoming.empty(); });
 				if (opts.match(incoming.front())) {
 					incoming.pop();
 					return;
@@ -124,14 +112,6 @@ namespace actor {
 					incoming.pop();
 				}
 			}
-		}
-		void kill() {
-			std::lock_guard<std::mutex> lock(mutex);
-			kill_flag = true;
-			cond.notify_all();
-		}
-		bool killed() const noexcept {
-			return kill_flag;
 		}
 	};
 
@@ -151,15 +131,6 @@ namespace actor {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
 				strong_queue->push(std::move(value));
-		}
-		void kill() const {
-			auto strong_queue = weak_queue.lock();
-			if (strong_queue)
-				strong_queue->kill();
-		}
-		bool killed() const noexcept {
-			auto strong_queue = weak_queue.lock();
-			return strong_queue ? strong_queue->killed() : true;
 		}
 		bool zombie() const noexcept {
 			return weak_queue.expired();
