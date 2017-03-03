@@ -119,9 +119,6 @@ namespace actor {
 		std::weak_ptr<queue> weak_queue;
 		public:
 		explicit handle(const std::shared_ptr<queue>& other) noexcept : weak_queue(other) {}
-		handle(const handle& other) noexcept = default;
-		handle(handle& other) noexcept = default;
-		handle(handle&& other) noexcept = default;
 		template<typename T> void send(const T& value) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
