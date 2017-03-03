@@ -98,7 +98,6 @@ namespace actor {
 		handle(const handle& other) noexcept = default;
 		handle(handle& other) noexcept = default;
 		handle(handle&& other) noexcept = default;
-		template<typename... U> explicit handle(U&&... _u);
 		template<typename T> void send(const T& value) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
@@ -131,9 +130,6 @@ namespace actor {
 		std::thread(std::forward<U>(u), ret, std::forward<V>(params)...).detach();
 		return ret.self();
 	}
-
-	template<typename... U> inline handle::handle(U&&... _u)
-	: handle(spawn(std::forward<U>(_u)...)) { }
 
 	inline handle receiver::self() const noexcept {
 		return handle(my_queue);

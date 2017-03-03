@@ -127,7 +127,7 @@ static void run(std::initializer_list<color> colors, size_t count) {
 	auto broker = spawn(broker_func, count, colors.size(), std::ref(promise));
 	std::vector<handle> chameneoses;
 	for (auto color : colors)
-		chameneoses.emplace_back(chameneos_func, color, broker);
+		chameneoses.push_back(spawn(chameneos_func, color, broker));
 	future.wait();
 	return;
 }
