@@ -78,7 +78,7 @@ struct message {
 	message(const handle* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
-static void broker_func(receiver recv, size_t meetings_count, size_t color_count) {
+static void broker_func(receiver recv, size_t meetings_count, size_t color_count, std::promise<void>& promise) {
 	for (auto i = 0u; i < meetings_count; ++i) {
 		message left = recv.receive<message>();
 		message right = recv.receive<message>();
@@ -89,9 +89,7 @@ static void broker_func(receiver recv, size_t meetings_count, size_t color_count
 		message last = recv.receive<message>();
 		last.chameneos->kill();
 	}
-}
 
-static void cleanup_func(const receiver recv, size_t color_count, std::promise<void>& promise) {
 	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		summary += recv.receive<size_t>();
@@ -101,7 +99,7 @@ static void cleanup_func(const receiver recv, size_t color_count, std::promise<v
 	promise.set_value();
 }
 
-static void chameneos_func(const receiver& recv, color start_color, const handle& broker, const handle cleanup) {
+static void chameneos_func(const receiver& recv, color start_color, const handle& broker) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
 	auto self = recv.self();
@@ -118,19 +116,18 @@ static void chameneos_func(const receiver& recv, color start_color, const handle
 	catch (const death&) {
 		std::lock_guard<std::mutex> lock(output_mutex);
 		std::cout << meetings << " " << spell(met_self) << std::endl;
-		cleanup.send(meetings);
+		broker.send(meetings);
 	}
 }
 
 static void run(std::initializer_list<color> colors, size_t count) {
 	print_header(colors);
-	auto broker = spawn(broker_func, count, colors.size());
 	std::promise<void> promise;
 	auto future = promise.get_future();
-	auto cleanup = spawn(cleanup_func, colors.size(), std::ref(promise));
+	auto broker = spawn(broker_func, count, colors.size(), std::ref(promise));
 	std::vector<handle> chameneoses;
 	for (auto color : colors)
-		chameneoses.emplace_back(chameneos_func, color, broker, cleanup);
+		chameneoses.emplace_back(chameneos_func, color, broker);
 	future.wait();
 	return;
 }
