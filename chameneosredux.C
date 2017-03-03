@@ -85,12 +85,14 @@ static void broker(size_t meetings_count, size_t color_count) {
 		left.chameneos->send(right);
 		right.chameneos->send(left);
 	}
+}
+
+static void cleanup(size_t color_count) {
+	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		message last = receive<message>();
 		last.chameneos->kill();
 	}
-
-	size_t summary = 0;
 	for (auto i = 0u; i < color_count; ++i) {
 		summary += receive<size_t>();
 	}
@@ -125,6 +127,7 @@ static void run(std::initializer_list<color> colors, size_t count) {
 	for (auto color : colors)
 		chameneoses.push_back(spawn(chameneos, color, self()));
 	broker(count, colors.size());
+	cleanup(colors.size());
 	return;
 }
 
