@@ -5,77 +5,44 @@
 #include "source/actor.h"
 
 static std::string spell(size_t n) {
-	static const std::string numbers[] = {
-	   " zero", " one", " two",
-	   " three", " four", " five",
-	   " six", " seven", " eight",
-	   " nine"
-	};
-
-	std::string str;
-	do {
-	   str.insert( 0, numbers[n % 10] );
-	   n /= 10;
-	} while (n);
-
-	return str;
+	static const std::string numbers[] = { " zero", " one", " two", " three", " four", " five", " six", " seven", " eight", " nine" };
+	auto next = numbers[n % 10];
+	return n / 10 ? spell(n / 10) + next : next;
 }
 
 enum color { blue = 0, red, yellow };
 
-// stream operator to write a color
-
-using namespace actor;
-
 static std::ostream& operator<<(std::ostream &s, const color &c ) {
-   static const char *names[] = { "blue", "red", "yellow" };
-   s << names[c];
-   return s;
+	static const std::string names[] = { "blue", "red", "yellow" };
+	return s << names[c];
 }
 
-static color operator+(const color &c1, const color &c2) {
-   switch ( c1 ) {
-      case blue: switch ( c2 ) {
-         case blue:   return blue;
-         case red:    return yellow;
-         case yellow: return red;
-      }
-      case red: switch ( c2 ) {
-         case blue:   return yellow;
-         case red:    return red;
-         case yellow: return blue;
-      }
-      case yellow: switch ( c2 ) {
-         case blue:   return red;
-         case red:    return blue;
-         case yellow: return yellow;
-      }
-   }
-   throw "Invalid";
-}
+static color table [3][3] = {
+	{ blue, yellow, red },
+	{ yellow, red, blue },
+	{ red, blue, yellow },
+};
 
 static void show_complements() {
-	for (auto i : { blue, red, yellow }) {
-		for (auto j : { blue, red, yellow }) {
-			std::cout << i << " + " << j << " -> " << (i + j) << std::endl;
-		}
-	}
+	for (auto i : { blue, red, yellow })
+		for (auto j : { blue, red, yellow })
+			std::cout << i << " + " << j << " -> " << (table[i][j]) << std::endl;
 }
 
 static std::mutex output_mutex;
 
 static void print_header(std::initializer_list<color> colors) {
-	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << std::endl;
 	for (auto i : colors)
 		std::cout << " " << i;
 	std::cout << std::endl;
 }
 
+using namespace actor;
+
 struct message {
 	const handle* chameneos;
 	const color colour;
-	message(const handle* _chameneos, color  _colour) : chameneos(_chameneos), colour(_colour) {}
 };
 
 static void broker(size_t meetings_count, size_t color_count) {
@@ -106,10 +73,10 @@ static void chameneos(color start_color, const handle& broker) {
 	auto self = actor::self();
 	try {
 		while (1) {
-			broker.send(message(&self, current));
+			broker.send(message{&self, current});
 			message tmp = receive<message>();
 			meetings++;
-			current = current + tmp.colour;
+			current = table[current][tmp.colour];
 			if (tmp.chameneos == &self)
 				met_self++;
 		}
