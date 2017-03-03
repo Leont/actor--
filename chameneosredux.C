@@ -44,6 +44,7 @@ struct message {
 	const handle* chameneos;
 	const color colour;
 };
+struct stop {};
 
 static void broker(size_t meetings_count, size_t color_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
@@ -56,12 +57,15 @@ static void broker(size_t meetings_count, size_t color_count) {
 
 static void cleanup(size_t color_count) {
 	size_t summary = 0;
-	for (auto i = 0u; i < color_count; ++i) {
-		message last = receive<message>();
-		last.chameneos->kill();
-	}
-	for (auto i = 0u; i < color_count; ++i) {
-		summary += receive<size_t>();
+	while(color_count) {
+		receive(
+		[](const message& last) {
+			last.chameneos->send(stop());
+		},
+		[&](size_t mismatch) {
+			summary += mismatch;
+			color_count--;
+		});
 	}
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
@@ -71,20 +75,22 @@ static void chameneos(color start_color, const handle& broker) {
 	size_t meetings = 0, met_self = 0;
 	color current = start_color;
 	auto self = actor::self();
-	try {
-		while (1) {
-			broker.send(message{&self, current});
-			message tmp = receive<message>();
+	bool alive = true;
+	while (alive) {
+		broker.send(message{&self, current});
+		receive(
+		[&] (const message& tmp) {
 			meetings++;
 			current = table[current][tmp.colour];
 			if (tmp.chameneos == &self)
 				met_self++;
-		}
-	}
-	catch (const death&) {
-		std::lock_guard<std::mutex> lock(output_mutex);
-		std::cout << meetings << " " << spell(met_self) << std::endl;
-		broker.send(meetings);
+		},
+		[&] (stop) {
+			std::lock_guard<std::mutex> lock(output_mutex);
+			std::cout << meetings << " " << spell(met_self) << std::endl;
+			broker.send(meetings);
+			alive = false;
+		});
 	}
 }
 

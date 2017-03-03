@@ -18,6 +18,39 @@ namespace actor {
 		}
 	};
 
+	namespace {
+		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
+		};
+		template <typename ClassType, typename ReturnType, typename Args> struct function_traits<ReturnType(ClassType::*)(Args) const> {
+			using arg = typename std::decay<Args>::type;
+		};
+
+		template<size_t pos, typename... T> static typename std::enable_if<pos >= sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
+			return false;
+		}
+		template<size_t pos, typename... T> static typename std::enable_if<pos < sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
+			using current = typename std::tuple_element<pos, std::tuple<T...>>::type;
+			using arg_type = typename function_traits<current>::arg;
+			if (const arg_type* value = std::any_cast<arg_type>(&any)) {
+				std::get<pos>(tuple)(*value);
+				return true;
+			}
+			else
+				return match_if<pos+1>(any, tuple);
+		}
+
+		template<typename... Values> class options {
+			std::tuple<Values...> matchers;
+			public:
+			options(Values&&... values)
+			: matchers(std::forward<Values>(values)...)
+			{ }
+			bool match(const std::any& any) {
+				return match_if<0>(any, matchers);
+			}
+		};
+	}
+
 	class queue {
 		std::mutex mutex;
 		std::condition_variable cond;
@@ -61,6 +94,30 @@ namespace actor {
 					T ret = std::move(*tmp);
 					incoming.pop();
 					return ret;
+				}
+				else {
+					pending.push_back(std::move(incoming.front()));
+					incoming.pop();
+				}
+			}
+		}
+		template<typename... A> void match(A&&... args) {
+			options<A...> opts(std::forward<A>(args)...);
+
+			for (auto current = pending.begin(); current != pending.end(); ++current) {
+				if (opts.match(*current)) {
+					pending.erase(current);
+					return;
+				}
+			}
+			std::unique_lock<std::mutex> lock(mutex);
+			while (1) {
+				cond.wait(lock, [&] { return kill_flag || !incoming.empty(); });
+				if (kill_flag)
+					throw death();
+				if (opts.match(incoming.front())) {
+					incoming.pop();
+					return;
 				}
 				else {
 					pending.push_back(std::move(incoming.front()));
@@ -123,7 +180,11 @@ namespace actor {
 		return mailbox->pop<T>();
 	}
 
-	template<typename U, typename... V> static handle spawn(U&& func, V&&... params) {
+	template<typename... Matchers> void receive(Matchers&&... matchers) {
+		mailbox->match(std::forward<Matchers>(matchers)...);
+	}
+
+	template<typename U, typename... V> handle spawn(U&& func, V&&... params) {
 		auto mail = std::make_shared<queue>();
 		auto callback = [mail, func=std::forward<U>(func), params...]() {
 			mailbox = mail;
