@@ -113,6 +113,29 @@ namespace actor {
 				}
 			}
 		}
+		template<typename Clock, typename Rep, typename Period, typename... A> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, A&&... args) {
+			options<A...> opts(std::forward<A>(args)...);
+
+			for (auto current = pending.begin(); current != pending.end(); ++current) {
+				if (opts.match(*current)) {
+					pending.erase(current);
+					return true;
+				}
+			}
+			std::unique_lock<std::mutex> lock(mutex);
+			while (1) {
+				if (!cond.wait_until(lock, until, [&] { return !incoming.empty(); }))
+					return false;
+				if (opts.match(incoming.front())) {
+					incoming.pop();
+					return true;
+				}
+				else {
+					pending.push_back(std::move(incoming.front()));
+					incoming.pop();
+				}
+			}
+		}
 	};
 
 	class handle {
@@ -155,6 +178,14 @@ namespace actor {
 	template<typename Condition, typename... Matchers> void receive_while(const Condition& condition, Matchers&&... matchers) {
 		while (condition)
 			receive(std::forward<Matchers>(matchers)...);
+	}
+
+	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
+		return mailbox->match_until(until, std::forward<Matchers>(matchers)...);
+	}
+
+	template<typename Rep, typename Period, typename... Matchers> bool receive_for(const std::chrono::duration<Rep, Period>& until, Matchers&&... matchers) {
+		return receive_until(std::chrono::steady_clock::now() + until, std::forward<Matchers>(matchers)...);
 	}
 
 	template<typename U, typename... V> handle spawn(U&& func, V&&... params) {
