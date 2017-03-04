@@ -152,6 +152,11 @@ namespace actor {
 		mailbox->match(std::forward<Matchers>(matchers)...);
 	}
 
+	template<typename Condition, typename... Matchers> void receive_while(const Condition& condition, Matchers&&... matchers) {
+		while (condition)
+			receive(std::forward<Matchers>(matchers)...);
+	}
+
 	template<typename U, typename... V> handle spawn(U&& func, V&&... params) {
 		auto mail = std::make_shared<queue>();
 		auto callback = [mail, func=std::forward<U>(func), params...]() {

@@ -57,16 +57,15 @@ static std::mutex output_mutex;
 
 static void cleanup(size_t color_count) {
 	auto summary = 0ul;
-	while(color_count) {
-		receive(
+	receive_while(color_count,
 		[](const message& last) {
 			last.chameneos->send(stop());
 		},
 		[&](size_t mismatch) {
 			summary += mismatch;
 			color_count--;
-		});
-	}
+		}
+	);
 	std::lock_guard<std::mutex> lock(output_mutex);
 	std::cout << spell(summary) << std::endl;
 }
@@ -75,22 +74,22 @@ static void chameneos(color current, const handle& broker) {
 	auto meetings = 0ul, met_self = 0ul;
 	auto self = actor::self();
 	auto alive = true;
-	while (alive) {
-		broker.send(message{&self, current});
-		receive(
+	broker.send(message{&self, current});
+	receive_while(alive,
 		[&] (const message& tmp) {
 			meetings++;
 			current = table[current][tmp.colour];
 			if (tmp.chameneos == &self)
 				met_self++;
+			broker.send(message{&self, current});
 		},
 		[&] (stop) {
 			std::lock_guard<std::mutex> lock(output_mutex);
 			std::cout << meetings << " " << spell(met_self) << std::endl;
 			broker.send(meetings);
 			alive = false;
-		});
-	}
+		}
+	);
 }
 
 static void run(const std::initializer_list<color>& colors, size_t count) {
