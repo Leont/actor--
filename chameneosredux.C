@@ -29,9 +29,7 @@ static void show_complements() {
 			std::cout << i << " + " << j << " -> " << (table[i][j]) << std::endl;
 }
 
-static std::mutex output_mutex;
-
-static void print_header(std::initializer_list<color> colors) {
+static void print_header(const std::initializer_list<color>& colors) {
 	std::cout << std::endl;
 	for (auto i : colors)
 		std::cout << " " << i;
@@ -46,17 +44,19 @@ struct message {
 };
 struct stop {};
 
-static void broker(size_t meetings_count, size_t color_count) {
+static void broker(size_t meetings_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		message left = receive<message>();
-		message right = receive<message>();
+		auto left = receive<message>();
+		auto right = receive<message>();
 		left.chameneos->send(right);
 		right.chameneos->send(left);
 	}
 }
 
+static std::mutex output_mutex;
+
 static void cleanup(size_t color_count) {
-	size_t summary = 0;
+	auto summary = 0ul;
 	while(color_count) {
 		receive(
 		[](const message& last) {
@@ -71,11 +71,10 @@ static void cleanup(size_t color_count) {
 	std::cout << spell(summary) << std::endl;
 }
 
-static void chameneos(color start_color, const handle& broker) {
-	size_t meetings = 0, met_self = 0;
-	color current = start_color;
+static void chameneos(color current, const handle& broker) {
+	auto meetings = 0ul, met_self = 0ul;
 	auto self = actor::self();
-	bool alive = true;
+	auto alive = true;
 	while (alive) {
 		broker.send(message{&self, current});
 		receive(
@@ -94,19 +93,18 @@ static void chameneos(color start_color, const handle& broker) {
 	}
 }
 
-static void run(std::initializer_list<color> colors, size_t count) {
+static void run(const std::initializer_list<color>& colors, size_t count) {
 	print_header(colors);
-	std::vector<handle> chameneoses;
 	for (auto color : colors)
-		chameneoses.push_back(spawn(chameneos, color, self()));
-	broker(count, colors.size());
+		spawn(chameneos, color, self());
+	broker(count);
 	cleanup(colors.size());
 	return;
 }
 
 int main (int argc, char ** argv) {
 	std::vector<std::string> args(argv + 1, argv + argc);
-	size_t count = args.size() ? std::stoul(args.at(0)) : 10;
+	auto count = args.size() ? std::stoul(args.at(0)) : 10000ul;
 	show_complements();
 	run({ blue, red, yellow }, count);
 	run({ blue, red, yellow, red, yellow, blue, red, yellow, red, blue }, count);
