@@ -10,7 +10,7 @@ all: examples
 
 examples: chameneosredux
 
-chameneosredux: chameneosredux.C source/actor.h
+chameneosredux: examples/chameneosredux.C source/actor.h
 	$(CXX) -o $@ $< $(CXXFLAGS)
 
 clean:

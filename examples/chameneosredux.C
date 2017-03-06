@@ -2,7 +2,7 @@
 #include <vector>
 #include <iostream>
 #include <future>
-#include "source/actor.h"
+#include <actor.h>
 
 static std::string spell(size_t n) {
 	static const std::string numbers[] = { " zero", " one", " two", " three", " four", " five", " six", " seven", " eight", " nine" };
