@@ -1,5 +1,8 @@
 // Copyright Leon Timmermans 2012-2017
 
+#ifndef __ACTOR_H__
+#define __ACTOR_H__
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -198,3 +201,5 @@ namespace actor {
 		return handle(mail);
 	}
 }
+
+#endif
