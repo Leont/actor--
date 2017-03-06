@@ -4,19 +4,22 @@
 #include <queue>
 #include <memory>
 #include <list>
+#include <tuple>
 
+#include <experimental/tuple>
 #include <boost/any.hpp>
 namespace std {
 	using any = boost::any;
 	using boost::any_cast;
+	using experimental::apply;
 }
 
 namespace actor {
 	namespace {
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
 		};
-		template <typename ClassType, typename ReturnType, typename Args> struct function_traits<ReturnType(ClassType::*)(Args) const> {
-			using arg = typename std::decay<Args>::type;
+		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
+			using args = std::tuple<typename std::decay<Args>::type...>;
 		};
 
 		template<size_t pos, typename... T> static typename std::enable_if<pos >= sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
@@ -24,9 +27,9 @@ namespace actor {
 		}
 		template<size_t pos, typename... T> static typename std::enable_if<pos < sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
 			using current = typename std::tuple_element<pos, std::tuple<T...>>::type;
-			using arg_type = typename function_traits<current>::arg;
+			using arg_type = typename function_traits<current>::args;
 			if (const arg_type* value = std::any_cast<arg_type>(&any)) {
-				std::get<pos>(tuple)(*value);
+				std::apply(std::get<pos>(tuple), *value);
 				return true;
 			}
 			else
@@ -142,15 +145,10 @@ namespace actor {
 		std::weak_ptr<queue> weak_queue;
 		public:
 		explicit handle(const std::shared_ptr<queue>& other) noexcept : weak_queue(other) {}
-		template<typename T> void send(const T& value) const {
+		template<typename... Args> void send(Args&&... args) const {
 			auto strong_queue = weak_queue.lock();
 			if (strong_queue)
-				strong_queue->push(value);
-		}
-		template<typename T> void send(T&& value) const {
-			auto strong_queue = weak_queue.lock();
-			if (strong_queue)
-				strong_queue->push(std::move(value));
+				strong_queue->push(std::make_tuple(std::forward<Args>(args)...));
 		}
 		bool zombie() const noexcept {
 			return weak_queue.expired();
@@ -167,8 +165,8 @@ namespace actor {
 		return handle(mailbox);
 	}
 
-	template<typename T> T receive() {
-		return mailbox->pop<T>();
+	template<typename... Args> std::tuple<Args...> receive() {
+		return mailbox->pop<std::tuple<Args...>>();
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {

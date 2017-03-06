@@ -38,18 +38,16 @@ static void print_header(const std::initializer_list<color>& colors) {
 
 using namespace actor;
 
-struct message {
-	const handle* chameneos;
-	const color colour;
-};
 struct stop {};
 
 static void broker(size_t meetings_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		auto left = receive<message>();
-		auto right = receive<message>();
-		left.chameneos->send(right);
-		right.chameneos->send(left);
+		const handle *handle_left, *handle_right;
+		color color_left, color_right;
+		std::tie(handle_left, color_left) = receive<const handle*, color>();
+		std::tie(handle_right, color_left) = receive<const handle*, color>();
+		handle_left->send(handle_right, color_right);
+		handle_right->send(handle_left, color_left);
 	}
 }
 
@@ -58,10 +56,10 @@ static std::mutex output_mutex;
 static void cleanup(size_t color_count) {
 	auto summary = 0ul;
 	receive_while(color_count,
-		[](const message& last) {
-			last.chameneos->send(stop());
+		[] (const handle* other, color) {
+			other->send(stop());
 		},
-		[&](size_t mismatch) {
+		[&] (size_t mismatch) {
 			summary += mismatch;
 			color_count--;
 		}
@@ -72,16 +70,16 @@ static void cleanup(size_t color_count) {
 
 static void chameneos(color current, const handle& broker) {
 	auto meetings = 0ul, met_self = 0ul;
-	auto self = actor::self();
+	const auto self = actor::self();
 	auto alive = true;
-	broker.send(message{&self, current});
+	broker.send(&self, current);
 	receive_while(alive,
-		[&] (const message& tmp) {
+		[&] (const handle* other, color colour) {
 			meetings++;
-			current = table[current][tmp.colour];
-			if (tmp.chameneos == &self)
+			current = table[current][colour];
+			if (other == &self)
 				met_self++;
-			broker.send(message{&self, current});
+			broker.send(&self, current);
 		},
 		[&] (stop) {
 			std::lock_guard<std::mutex> lock(output_mutex);
