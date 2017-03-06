@@ -1,3 +1,5 @@
+// Copyright Leon Timmermans 2012-2017
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
