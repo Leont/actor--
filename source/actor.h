@@ -27,10 +27,10 @@ namespace actor {
 			using args = std::tuple<typename std::decay<Args>::type...>;
 		};
 
-		template<size_t pos, typename... T> static typename std::enable_if<pos >= sizeof...(T), bool>::type match_if(const std::any&, const std::tuple<T...>&) {
+		template<size_t pos = 0, typename... T> static typename std::enable_if<pos >= sizeof...(T), bool>::type match_if(const std::any&, const std::tuple<T...>&) {
 			return false;
 		}
-		template<size_t pos, typename... T> static typename std::enable_if<pos < sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
+		template<size_t pos = 0, typename... T> static typename std::enable_if<pos < sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
 			using current = typename std::tuple_element<pos, std::tuple<T...>>::type;
 			using arg_type = typename function_traits<current>::args;
 			if (const arg_type* value = std::any_cast<arg_type>(&any)) {
@@ -41,16 +41,6 @@ namespace actor {
 				return match_if<pos+1>(any, tuple);
 		}
 
-		template<typename... Values> class options {
-			std::tuple<Values...> matchers;
-			public:
-			options(Values&&... values)
-			: matchers(std::forward<Values>(values)...)
-			{ }
-			bool match(const std::any& any) {
-				return match_if<0>(any, matchers);
-			}
-		};
 	}
 
 	class queue {
@@ -100,10 +90,10 @@ namespace actor {
 			}
 		}
 		template<typename... A> void match(A&&... args) {
-			options<A...> opts(std::forward<A>(args)...);
+			std::tuple<A...> matchers(std::forward<A>(args)...);
 
 			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (opts.match(*current)) {
+				if (match_if(*current, matchers)) {
 					pending.erase(current);
 					return;
 				}
@@ -111,7 +101,7 @@ namespace actor {
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				cond.wait(lock, [&] { return !incoming.empty(); });
-				if (opts.match(incoming.front())) {
+				if (match_if(incoming.front(), matchers)) {
 					incoming.pop();
 					return;
 				}
@@ -122,10 +112,10 @@ namespace actor {
 			}
 		}
 		template<typename Clock, typename Rep, typename Period, typename... A> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, A&&... args) {
-			options<A...> opts(std::forward<A>(args)...);
+			std::tuple<A...> matchers(std::forward<A>(args)...);
 
 			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (opts.match(*current)) {
+				if (match_if(*current, matchers)) {
 					pending.erase(current);
 					return true;
 				}
@@ -134,7 +124,7 @@ namespace actor {
 			while (1) {
 				if (!cond.wait_until(lock, until, [&] { return !incoming.empty(); }))
 					return false;
-				if (opts.match(incoming.front())) {
+				if (match_if(incoming.front(), matchers)) {
 					incoming.pop();
 					return true;
 				}
