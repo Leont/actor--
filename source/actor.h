@@ -148,19 +148,20 @@ namespace actor {
 		}
 	};
 
-	namespace {
-		thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
+	namespace hidden {
+		extern const thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
+		extern const thread_local handle self_var(hidden::mailbox);
 	}
-	handle self() {
-		return handle(mailbox);
+	static inline const handle& self() {
+		return hidden::self_var;
 	}
 
 	template<typename... Args> std::tuple<Args...> receive() {
-		return mailbox->pop<std::tuple<Args...>>();
+		return hidden::mailbox->pop<std::tuple<Args...>>();
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {
-		mailbox->match(std::forward<Matchers>(matchers)...);
+		hidden::mailbox->match(std::forward<Matchers>(matchers)...);
 	}
 
 	template<typename Condition, typename... Matchers> void receive_while(const Condition& condition, Matchers&&... matchers) {
@@ -169,7 +170,7 @@ namespace actor {
 	}
 
 	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
-		return mailbox->match_until(until, std::forward<Matchers>(matchers)...);
+		return hidden::mailbox->match_until(until, std::forward<Matchers>(matchers)...);
 	}
 
 	template<typename Rep, typename Period, typename... Matchers> bool receive_for(const std::chrono::duration<Rep, Period>& until, Matchers&&... matchers) {
@@ -177,13 +178,13 @@ namespace actor {
 	}
 
 	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
-		auto mail = std::make_shared<queue>();
-		auto callback = [mail](auto function, auto... args) {
-			mailbox = mail;
+		std::promise<handle> promise;
+		auto callback = [&promise](auto function, auto... args) {
+			promise.set_value(self());
 			function(std::forward<Args>(args)...);
 		};
 		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
-		return handle(mail);
+		return promise.get_future().get();
 	}
 }
 
