@@ -1,5 +1,5 @@
 CXX = g++
-WARNINGS = -Wall -Weffc++ -Wshadow -Wextra -Wno-unused-parameter
+WARNINGS = -Wall -Weffc++ -Wshadow -Wextra
 #DEBUG = -ggdb3 -DDEBUG
 DEBUG=-O3 -flto -Wl,--no-as-needed
 DFLAGS = -fPIC
