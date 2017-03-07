@@ -1,0 +1,24 @@
+This is a header-only C++17 library implementing actor-based threading.
+
+Messages can be send using the send method, taking zero or more arguments:
+
+  handle.send(1, "foo"s);
+
+And received using the receive function:
+
+  receive(
+    [] (int number, const std::string& description) {
+      // ...
+    }
+    [] (const some_object&) {
+      // ...
+    }
+  );
+
+Receive will match each message against each selector, and will return when it finds a match. One can also receive with a timeout.
+
+A more extensive example can be found in the examples/ folder, along with its erlang equivalent (taken from the Debian language shoot-out).
+
+Currently there's still a dependency on boost and std::experimental headers, this will be eliminated as soon as compilers with sufficient C++17 support are released.
+
+This software may by used and distributed under the ISC licence
