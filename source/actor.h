@@ -72,7 +72,14 @@ namespace actor {
 		}
 		template<typename... A> void match(A&&... args) {
 			std::tuple<A...> matchers(std::forward<A>(args)...);
-
+			match_once(matchers);
+		}
+		template<typename C, typename... A> void match_while(const C& condition, A&&... args) {
+			std::tuple<A...> matchers(std::forward<A>(args)...);
+			while (condition)
+				match_once(matchers);
+		}
+		template<typename... A> void match_once(const std::tuple<A...>& matchers) {
 			for (auto current = pending.begin(); current != pending.end(); ++current)
 				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
 					return;
@@ -120,7 +127,7 @@ namespace actor {
 			pending.clear();
 			while (!incoming.empty())
 				incoming.pop();
-			const auto message = std::make_tuple(args...);
+			const auto message = std::make_tuple(std::forward<Args>(args)...);
 			for (const auto& monitor : monitors)
 				if (const auto strong = monitor.lock())
 					strong->push(message);
@@ -171,8 +178,7 @@ namespace actor {
 	}
 
 	template<typename Condition, typename... Matchers> void receive_while(const Condition& condition, Matchers&&... matchers) {
-		while (condition)
-			receive(std::forward<Matchers>(matchers)...);
+		hidden::mailbox->match_while(condition, std::forward<Matchers>(matchers)...);
 	}
 
 	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
