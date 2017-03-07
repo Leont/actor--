@@ -176,13 +176,13 @@ namespace actor {
 		return receive_until(std::chrono::steady_clock::now() + until, std::forward<Matchers>(matchers)...);
 	}
 
-	template<typename U, typename... V> handle spawn(U&& func, V&&... params) {
+	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
 		auto mail = std::make_shared<queue>();
-		auto callback = [mail, func=std::forward<U>(func), params...]() {
+		auto callback = [mail](auto function, auto... args) {
 			mailbox = mail;
-			func(params...);
+			function(std::forward<Args>(args)...);
 		};
-		std::thread(callback).detach();
+		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
 		return handle(mail);
 	}
 }
