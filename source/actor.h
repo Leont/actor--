@@ -20,7 +20,7 @@ namespace std {
 }
 
 namespace actor {
-	namespace {
+	namespace hidden {
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
@@ -68,12 +68,12 @@ namespace actor {
 			std::tuple<A...> matchers(std::forward<A>(args)...);
 
 			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (match_if(*current, [this, &current] { pending.erase(current); }, matchers))
+				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
 					return;
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				cond.wait(lock, [&] { return !incoming.empty(); });
-				if (match_if(incoming.front(), [this, &lock] { incoming.pop(); lock.unlock(); }, matchers))
+				if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
 					return;
 				else {
 					pending.push_back(std::move(incoming.front()));
@@ -85,13 +85,13 @@ namespace actor {
 			std::tuple<A...> matchers(std::forward<A>(args)...);
 
 			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (match_if(*current, [this, &current] { pending.erase(current); }, matchers))
+				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
 					return true;
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				if (!cond.wait_until(lock, until, [&] { return !incoming.empty(); }))
 					return false;
-				else if (match_if(incoming.front(), [this, &lock] { incoming.pop(); lock.unlock(); }, matchers))
+				else if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
 					return true;
 				else {
 					pending.push_back(std::move(incoming.front()));
