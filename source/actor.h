@@ -128,6 +128,15 @@ namespace actor {
 		friend void swap(handle& left, handle& right) noexcept {
 			swap(left.mailbox, right.mailbox);
 		}
+		friend bool operator==(const handle& left, const handle& right) {
+			return left.mailbox == right.mailbox;
+		}
+		friend bool operator!=(const handle& left, const handle& right) {
+			return left.mailbox != right.mailbox;
+		}
+		friend bool operator<(const handle& left, const handle& right) {
+			return left.mailbox.get() < right.mailbox.get();
+		}
 	};
 
 	namespace hidden {
