@@ -50,6 +50,7 @@ namespace actor {
 		std::condition_variable cond;
 		std::queue<std::any> incoming;
 		std::list<std::any> pending;
+		std::atomic<bool> living;
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
 		public:
@@ -58,9 +59,12 @@ namespace actor {
 		, cond()
 		, incoming()
 		, pending()
+		, living(true)
 		{ }
 		template<typename T> void push(T&& value) {
 			std::lock_guard<std::mutex> lock(mutex);
+			if (!living)
+				return;
 			incoming.push(std::move(value));
 			cond.notify_one();
 		}
@@ -99,22 +103,30 @@ namespace actor {
 				}
 			}
 		}
+		bool alive() const {
+			return living;
+		}
+		void mark_dead() {
+			std::lock_guard<std::mutex> lock(mutex);
+			living = false;
+			pending.clear();
+			while (!incoming.empty())
+				incoming.pop();
+		}
 	};
 
 	class handle {
-		std::weak_ptr<queue> weak_queue;
+		std::shared_ptr<queue> mailbox;
 		public:
-		explicit handle(const std::shared_ptr<queue>& other) noexcept : weak_queue(other) {}
+		explicit handle(const std::shared_ptr<queue>& other) noexcept : mailbox(other) {}
 		template<typename... Args> void send(Args&&... args) const {
-			auto strong_queue = weak_queue.lock();
-			if (strong_queue)
-				strong_queue->push(std::make_tuple(std::forward<Args>(args)...));
+			mailbox->push(std::make_tuple(std::forward<Args>(args)...));
 		}
-		bool zombie() const noexcept {
-			return weak_queue.expired();
+		bool alive() const noexcept {
+			return mailbox->alive();
 		}
 		friend void swap(handle& left, handle& right) noexcept {
-			swap(left.weak_queue, right.weak_queue);
+			swap(left.mailbox, right.mailbox);
 		}
 	};
 
@@ -148,6 +160,7 @@ namespace actor {
 		auto callback = [&promise](auto function, auto... args) {
 			promise.set_value(self());
 			function(std::forward<Args>(args)...);
+			hidden::mailbox->mark_dead();
 		};
 		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
 		return promise.get_future().get();
