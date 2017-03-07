@@ -57,11 +57,6 @@ namespace actor {
 		, incoming()
 		, pending()
 		{ }
-		template<typename T> void push(const T& value) {
-			std::lock_guard<std::mutex> lock(mutex);
-			incoming.push(value);
-			cond.notify_one();
-		}
 		template<typename T> void push(T&& value) {
 			std::lock_guard<std::mutex> lock(mutex);
 			incoming.push(std::move(value));
