@@ -50,6 +50,7 @@ namespace actor {
 		std::condition_variable cond;
 		std::queue<std::any> incoming;
 		std::list<std::any> pending;
+		std::vector<std::weak_ptr<queue>> monitors;
 		std::atomic<bool> living;
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
@@ -59,6 +60,7 @@ namespace actor {
 		, cond()
 		, incoming()
 		, pending()
+		, monitors()
 		, living(true)
 		{ }
 		template<typename T> void push(T&& value) {
@@ -103,17 +105,32 @@ namespace actor {
 				}
 			}
 		}
+		bool add_monitor(const std::shared_ptr<queue>& monitor) {
+			std::lock_guard<std::mutex> lock(mutex);
+			if (living)
+				monitors.push_back(monitor);
+			return living;
+		}
 		bool alive() const {
 			return living;
 		}
-		void mark_dead() {
+		template<typename... Args> void mark_dead(Args&&... args) {
 			std::lock_guard<std::mutex> lock(mutex);
 			living = false;
 			pending.clear();
 			while (!incoming.empty())
 				incoming.pop();
+			const auto message = std::make_tuple(args...);
+			for (const auto& monitor : monitors)
+				if (const auto strong = monitor.lock())
+					strong->push(message);
+			monitors.clear();
 		}
 	};
+
+	namespace hidden {
+		extern const thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
+	}
 
 	class handle {
 		std::shared_ptr<queue> mailbox;
@@ -121,6 +138,9 @@ namespace actor {
 		explicit handle(const std::shared_ptr<queue>& other) noexcept : mailbox(other) {}
 		template<typename... Args> void send(Args&&... args) const {
 			mailbox->push(std::make_tuple(std::forward<Args>(args)...));
+		}
+		bool monitor() const {
+			return mailbox->add_monitor(hidden::mailbox);
 		}
 		bool alive() const noexcept {
 			return mailbox->alive();
@@ -140,7 +160,6 @@ namespace actor {
 	};
 
 	namespace hidden {
-		extern const thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
 		extern const thread_local handle self_var(hidden::mailbox);
 	}
 	static inline const handle& self() {
@@ -164,12 +183,21 @@ namespace actor {
 		return receive_until(std::chrono::steady_clock::now() + until, std::forward<Matchers>(matchers)...);
 	}
 
+	struct exit {};
+	struct error {};
+
 	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
 		std::promise<handle> promise;
 		auto callback = [&promise](auto function, auto... args) {
 			promise.set_value(self());
-			function(std::forward<Args>(args)...);
-			hidden::mailbox->mark_dead();
+			try {
+				function(std::forward<Args>(args)...);
+			}
+			catch(...) {
+				hidden::mailbox->mark_dead(error(), self(), std::current_exception());
+				return;
+			}
+			hidden::mailbox->mark_dead(exit(), self());
 		};
 		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
 		return promise.get_future().get();
