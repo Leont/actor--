@@ -27,18 +27,20 @@ namespace actor {
 			using args = std::tuple<typename std::decay<Args>::type...>;
 		};
 
-		template<size_t pos = 0, typename... T> static typename std::enable_if<pos >= sizeof...(T), bool>::type match_if(const std::any&, const std::tuple<T...>&) {
+		template<size_t pos = 0, typename C, typename... T> static typename std::enable_if<pos >= sizeof...(T), size_t>::type match_if(std::any&, const C&, const std::tuple<T...>&) {
 			return false;
 		}
-		template<size_t pos = 0, typename... T> static typename std::enable_if<pos < sizeof...(T), bool>::type match_if(const std::any& any, const std::tuple<T...>& tuple) {
+		template<size_t pos = 0, typename C, typename... T> static typename std::enable_if<pos < sizeof...(T), size_t>::type match_if(std::any& any, const C& callback, const std::tuple<T...>& tuple) {
 			using current = typename std::tuple_element<pos, std::tuple<T...>>::type;
 			using arg_type = typename function_traits<current>::args;
-			if (const arg_type* value = std::any_cast<arg_type>(&any)) {
-				std::apply(std::get<pos>(tuple), *value);
+			if (arg_type* pointer = std::any_cast<arg_type>(&any)) {
+				arg_type value = std::move(*pointer);
+				callback();
+				std::apply(std::get<pos>(tuple), std::move(value));
 				return true;
 			}
 			else
-				return match_if<pos+1>(any, tuple);
+				return match_if<pos+1>(any, callback, tuple);
 		}
 
 	}
@@ -62,44 +64,17 @@ namespace actor {
 			incoming.push(std::move(value));
 			cond.notify_one();
 		}
-		template<typename T> T pop() {
-			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (T* tmp = std::any_cast<T>(&*current)) {
-					T ret = std::move(*tmp);
-					pending.erase(current);
-					return ret;
-				}
-			}
-			std::unique_lock<std::mutex> lock(mutex);
-			while (1) {
-				cond.wait(lock, [&] { return !incoming.empty(); });
-				if (T* tmp = std::any_cast<T>(&incoming.front())) {
-					T ret = std::move(*tmp);
-					incoming.pop();
-					return ret;
-				}
-				else {
-					pending.push_back(std::move(incoming.front()));
-					incoming.pop();
-				}
-			}
-		}
 		template<typename... A> void match(A&&... args) {
 			std::tuple<A...> matchers(std::forward<A>(args)...);
 
-			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (match_if(*current, matchers)) {
-					pending.erase(current);
+			for (auto current = pending.begin(); current != pending.end(); ++current)
+				if (match_if(*current, [this, &current] { pending.erase(current); }, matchers))
 					return;
-				}
-			}
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				cond.wait(lock, [&] { return !incoming.empty(); });
-				if (match_if(incoming.front(), matchers)) {
-					incoming.pop();
+				if (match_if(incoming.front(), [this, &lock] { incoming.pop(); lock.unlock(); }, matchers))
 					return;
-				}
 				else {
 					pending.push_back(std::move(incoming.front()));
 					incoming.pop();
@@ -109,20 +84,15 @@ namespace actor {
 		template<typename Clock, typename Rep, typename Period, typename... A> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, A&&... args) {
 			std::tuple<A...> matchers(std::forward<A>(args)...);
 
-			for (auto current = pending.begin(); current != pending.end(); ++current) {
-				if (match_if(*current, matchers)) {
-					pending.erase(current);
+			for (auto current = pending.begin(); current != pending.end(); ++current)
+				if (match_if(*current, [this, &current] { pending.erase(current); }, matchers))
 					return true;
-				}
-			}
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				if (!cond.wait_until(lock, until, [&] { return !incoming.empty(); }))
 					return false;
-				if (match_if(incoming.front(), matchers)) {
-					incoming.pop();
+				else if (match_if(incoming.front(), [this, &lock] { incoming.pop(); lock.unlock(); }, matchers))
 					return true;
-				}
 				else {
 					pending.push_back(std::move(incoming.front()));
 					incoming.pop();
@@ -154,10 +124,6 @@ namespace actor {
 	}
 	static inline const handle& self() {
 		return hidden::self_var;
-	}
-
-	template<typename... Args> std::tuple<Args...> receive() {
-		return hidden::mailbox->pop<std::tuple<Args...>>();
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {

@@ -42,12 +42,12 @@ struct stop {};
 
 static void broker(size_t meetings_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		const handle *handle_left, *handle_right;
-		color color_left, color_right;
-		std::tie(handle_left, color_left) = receive<const handle*, color>();
-		std::tie(handle_right, color_left) = receive<const handle*, color>();
-		handle_left->send(handle_right, color_right);
-		handle_right->send(handle_left, color_left);
+		receive([](const handle* handle_left, color color_left) {
+			receive([=](const handle* handle_right, color color_right) {
+				handle_left->send(handle_right, color_right);
+				handle_right->send(handle_left, color_left);
+			});
+		});
 	}
 }
 
