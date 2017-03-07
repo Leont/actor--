@@ -9,9 +9,12 @@ And received using the receive function:
   receive(
     [] (int number, const std::string& description) {
       // ...
-    }
+    },
     [] (const some_object&) {
       // ...
+    },
+    [] (stop) {
+      // stop the loop
     }
   );
 
