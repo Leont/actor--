@@ -42,10 +42,10 @@ struct stop {};
 
 static void broker(size_t meetings_count) {
 	for (auto i = 0u; i < meetings_count; ++i) {
-		receive([](const handle* handle_left, color color_left) {
-			receive([=](const handle* handle_right, color color_right) {
-				handle_left->send(handle_right, color_right);
-				handle_right->send(handle_left, color_left);
+		receive([](const handle& handle_left, color color_left) {
+			receive([&](const handle& handle_right, color color_right) {
+				handle_left.send(handle_right, color_right);
+				handle_right.send(handle_left, color_left);
 			});
 		});
 	}
@@ -56,8 +56,8 @@ static std::mutex output_mutex;
 static void cleanup(size_t color_count) {
 	auto summary = 0ul;
 	receive_while(color_count,
-		[] (const handle* other, color) {
-			other->send(stop());
+		[] (const handle& other, color) {
+			other.send(stop());
 		},
 		[&] (size_t mismatch) {
 			summary += mismatch;
@@ -72,14 +72,14 @@ static void chameneos(color current, const handle& broker) {
 	auto meetings = 0ul, met_self = 0ul;
 	const auto self = actor::self();
 	auto alive = true;
-	broker.send(&self, current);
+	broker.send(self, current);
 	receive_while(alive,
-		[&] (const handle* other, color colour) {
+		[&] (const handle& other, color colour) {
 			meetings++;
 			current = table[current][colour];
-			if (other == &self)
+			if (other == self)
 				met_self++;
-			broker.send(&self, current);
+			broker.send(self, current);
 		},
 		[&] (stop) {
 			std::lock_guard<std::mutex> lock(output_mutex);
