@@ -80,6 +80,7 @@ namespace actor {
 				match_once(matchers);
 		}
 		template<typename... A> void match_once(const std::tuple<A...>& matchers) {
+			static_assert(sizeof...(A) != 0, "Can't call receive without arguments");
 			for (auto current = pending.begin(); current != pending.end(); ++current)
 				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
 					return;
@@ -95,6 +96,7 @@ namespace actor {
 			}
 		}
 		template<typename Clock, typename Rep, typename Period, typename... A> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, A&&... args) {
+			static_assert(sizeof...(A) != 0, "Can't call receive without arguments");
 			std::tuple<A...> matchers(std::forward<A>(args)...);
 
 			for (auto current = pending.begin(); current != pending.end(); ++current)
