@@ -70,49 +70,18 @@ namespace actor {
 			incoming.push(std::move(value));
 			cond.notify_one();
 		}
-		template<typename... A> void match(A&&... args) {
-			std::tuple<A...> matchers(std::forward<A>(args)...);
+		template<typename... Args> void match(Args&&... args) {
+			std::tuple<Args...> matchers(std::forward<Args>(args)...);
 			match_once(matchers);
 		}
-		template<typename C, typename... A> void match_while(const C& condition, A&&... args) {
-			std::tuple<A...> matchers(std::forward<A>(args)...);
+		template<typename C, typename... Args> void match_while(const C& condition, Args&&... args) {
+			std::tuple<Args...> matchers(std::forward<Args>(args)...);
 			while (condition)
 				match_once(matchers);
 		}
-		template<typename... A> void match_once(const std::tuple<A...>& matchers) {
-			static_assert(sizeof...(A) != 0, "Can't call receive without arguments");
-			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
-					return;
-			std::unique_lock<std::mutex> lock(mutex);
-			while (1) {
-				cond.wait(lock, [&] { return !incoming.empty(); });
-				if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
-					return;
-				else {
-					pending.push_back(std::move(incoming.front()));
-					incoming.pop();
-				}
-			}
-		}
-		template<typename Clock, typename Rep, typename Period, typename... A> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, A&&... args) {
-			static_assert(sizeof...(A) != 0, "Can't call receive without arguments");
-			std::tuple<A...> matchers(std::forward<A>(args)...);
-
-			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
-					return true;
-			std::unique_lock<std::mutex> lock(mutex);
-			while (1) {
-				if (!cond.wait_until(lock, until, [&] { return !incoming.empty(); }))
-					return false;
-				else if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
-					return true;
-				else {
-					pending.push_back(std::move(incoming.front()));
-					incoming.pop();
-				}
-			}
+		template<typename Clock, typename Rep, typename Period, typename... Args> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Args&&... args) {
+			std::tuple<Args...> matchers(std::forward<Args>(args)...);
+			return match_with(matchers, [this, &until](auto& lock, const auto& check) { return cond.wait_until(lock, until, check); });
 		}
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -134,6 +103,28 @@ namespace actor {
 				if (const auto strong = monitor.lock())
 					strong->push(message);
 			monitors.clear();
+		}
+		private:
+		template<typename... Args> void match_once(const std::tuple<Args...>& matchers) {
+			match_with(matchers, [this](auto& lock, const auto& check) -> bool { cond.wait(lock, check); return true; });
+		}
+		template<typename Waiter, typename... Args> bool match_with(const std::tuple<Args...>& matchers, const Waiter& waiter) {
+			static_assert(sizeof...(Args) != 0, "Can't call receive without arguments");
+
+			for (auto current = pending.begin(); current != pending.end(); ++current)
+				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers))
+					return true;
+			std::unique_lock<std::mutex> lock(mutex);
+			while (1) {
+				if (!waiter(lock, [&] { return !incoming.empty(); }))
+					return false;
+				else if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
+					return true;
+				else {
+					pending.push_back(std::move(incoming.front()));
+					incoming.pop();
+				}
+			}
 		}
 	};
 
