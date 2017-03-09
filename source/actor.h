@@ -28,7 +28,7 @@ namespace actor {
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
-			using args = std::tuple<typename std::decay<Args>::type...>;
+			using args = std::tuple<std::decay_t<Args>...>;
 		};
 
 		template<typename Callback> static bool match_if(std::any&, const Callback&) {
