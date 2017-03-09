@@ -13,14 +13,9 @@
 
 #if __cplusplus <= 201402L
 #include <experimental/tuple>
-#include <boost/any.hpp>
 namespace std {
-	using any = boost::any;
-	using boost::any_cast;
 	using experimental::apply;
 }
-#else
-#include <any>
 #endif
 
 namespace actor {
@@ -31,12 +26,37 @@ namespace actor {
 			using args = std::tuple<std::decay_t<Args>...>;
 		};
 
-		template<typename Callback> static bool match_if(std::any&, const Callback&) {
+		class message_base {
+			public:
+			virtual void* get(const std::type_info& info) = 0;
+			virtual ~message_base() {}
+			template<typename T> T* to() {
+				return static_cast<T*>(get(typeid(std::decay_t<T>)));
+			}
+		};
+		template<typename T> class message : public message_base {
+			T _value;
+			public:
+			message(T value)
+			: _value(std::move(value))
+			{}
+			virtual void* get(const std::type_info& info) {
+				if (typeid(T) == info)
+					return &_value;
+				else
+					return nullptr;
+			}
+		};
+		template<typename T> std::unique_ptr<message_base> make_message(T value) {
+			return std::make_unique<message<std::decay_t<T>>>(std::move(value));
+		}
+
+		template<typename Callback> static bool match_if(std::unique_ptr<message_base>&, const Callback&) {
 			return false;
 		}
-		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::any& any, const Callback& callback, const Head& head, const Tail&... tail) {
+		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message_base>& any, const Callback& callback, const Head& head, const Tail&... tail) {
 			using arg_type = typename function_traits<Head>::args;
-			if (arg_type* pointer = std::any_cast<arg_type>(&any)) {
+			if (arg_type* pointer = any->to<arg_type>()) {
 				arg_type value = std::move(*pointer);
 				callback();
 				std::apply(head, std::move(value));
@@ -50,8 +70,8 @@ namespace actor {
 	class queue {
 		std::mutex mutex;
 		std::condition_variable cond;
-		std::queue<std::any> incoming;
-		std::list<std::any> pending;
+		std::queue<std::unique_ptr<hidden::message_base>> incoming;
+		std::list<std::unique_ptr<hidden::message_base>> pending;
 		std::vector<std::weak_ptr<queue>> monitors;
 		std::atomic<bool> living;
 		queue(const queue&) = delete;
@@ -69,7 +89,7 @@ namespace actor {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (!living)
 				return;
-			incoming.push(std::move(value));
+			incoming.push(hidden::make_message<T>(std::move(value)));
 			cond.notify_one();
 		}
 		template<typename... Args> void match(const Args&... matchers) {
