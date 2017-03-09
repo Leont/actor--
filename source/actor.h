@@ -11,13 +11,6 @@
 #include <list>
 #include <tuple>
 
-#if __cplusplus <= 201402L
-#include <experimental/tuple>
-namespace std {
-	using experimental::apply;
-}
-#endif
-
 namespace actor {
 	namespace hidden {
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
@@ -51,6 +44,14 @@ namespace actor {
 			return std::make_unique<message<std::decay_t<T>>>(std::move(value));
 		}
 
+		template<class Function, class Tuple, std::size_t... I> constexpr decltype(auto) apply_impl(Function &&f, Tuple &&t, std::index_sequence<I...>) {
+			return f(std::get<I>(std::forward<Tuple>(t))...);
+		}
+
+		template<class Function, class Tuple> constexpr decltype(auto) apply(Function &&f, Tuple &&t) {
+			return apply_impl(std::forward<Function>(f), std::forward<Tuple>(t), std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>{});
+		}
+
 		template<typename Callback> static bool match_if(std::unique_ptr<message_base>&, const Callback&) {
 			return false;
 		}
@@ -59,7 +60,7 @@ namespace actor {
 			if (arg_type* pointer = any->to<arg_type>()) {
 				arg_type value = std::move(*pointer);
 				callback();
-				std::apply(head, std::move(value));
+				apply(head, std::move(value));
 				return true;
 			}
 			else
