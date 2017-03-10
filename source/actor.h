@@ -12,13 +12,7 @@
 #include <tuple>
 
 namespace actor {
-	namespace hidden {
-		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
-		};
-		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
-			using args = std::tuple<std::decay_t<Args>...>;
-		};
-
+	class queue {
 		class message_base {
 			public:
 			virtual void* get(const std::type_info& info) = 0;
@@ -40,17 +34,22 @@ namespace actor {
 					return nullptr;
 			}
 		};
-		template<typename T> std::unique_ptr<message_base> make_message(T value) {
+		template<typename T> static std::unique_ptr<message_base> make_message(T value) {
 			return std::make_unique<message<std::decay_t<T>>>(std::move(value));
 		}
 
-		template<class Function, class Tuple, std::size_t... I> constexpr decltype(auto) apply_impl(Function &&f, Tuple &&t, std::index_sequence<I...>) {
-			return f(std::get<I>(std::forward<Tuple>(t))...);
+		template<class Function, class Tuple, std::size_t... I> static void apply_impl(Function&& f, Tuple&& t, std::index_sequence<I...>) {
+			f(std::get<I>(std::forward<Tuple>(t))...);
+		}
+		template<class Function, class Tuple> static void apply(Function&& f, Tuple&& t) {
+			apply_impl(std::forward<Function>(f), std::forward<Tuple>(t), std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>{});
 		}
 
-		template<class Function, class Tuple> constexpr decltype(auto) apply(Function &&f, Tuple &&t) {
-			return apply_impl(std::forward<Function>(f), std::forward<Tuple>(t), std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>{});
-		}
+		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
+		};
+		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
+			using args = std::tuple<std::decay_t<Args>...>;
+		};
 
 		template<typename Callback> static bool match_if(std::unique_ptr<message_base>&, const Callback&) {
 			return false;
@@ -66,17 +65,16 @@ namespace actor {
 			else
 				return match_if(any, callback, tail...);
 		}
-	}
 
-	class queue {
 		std::mutex mutex;
 		std::condition_variable cond;
-		std::queue<std::unique_ptr<hidden::message_base>> incoming;
-		std::list<std::unique_ptr<hidden::message_base>> pending;
+		std::queue<std::unique_ptr<message_base>> incoming;
+		std::list<std::unique_ptr<message_base>> pending;
 		std::vector<std::weak_ptr<queue>> monitors;
 		std::atomic<bool> living;
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
+
 		public:
 		queue()
 		: mutex()
@@ -90,7 +88,7 @@ namespace actor {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (!living)
 				return;
-			incoming.push(hidden::make_message<T>(std::move(value)));
+			incoming.push(make_message<T>(std::move(value)));
 			cond.notify_one();
 		}
 		template<typename... Args> void match(const Args&... matchers) {
@@ -114,10 +112,10 @@ namespace actor {
 			pending.clear();
 			while (!incoming.empty())
 				incoming.pop();
-			const auto message = std::make_tuple(std::forward<Args>(args)...);
+			const auto testament = std::make_tuple(std::forward<Args>(args)...);
 			for (const auto& monitor : monitors)
 				if (const auto strong = monitor.lock())
-					strong->push(message);
+					strong->push(testament);
 			monitors.clear();
 		}
 		private:
@@ -125,13 +123,13 @@ namespace actor {
 			static_assert(sizeof...(Args) != 0, "Can't call receive without arguments");
 
 			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (hidden::match_if(*current, [&] { pending.erase(current); }, matchers...))
+				if (match_if(*current, [&] { pending.erase(current); }, matchers...))
 					return true;
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				if (!waiter(lock, [&] { return !incoming.empty(); }))
 					return false;
-				else if (hidden::match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers...))
+				else if (match_if(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers...))
 					return true;
 				else {
 					pending.push_back(std::move(incoming.front()));
