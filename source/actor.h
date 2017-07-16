@@ -181,11 +181,6 @@ namespace actor {
 		hidden::mailbox->match(matchers...);
 	}
 
-	template<typename Condition, typename... Matchers> void receive_while(const Condition& condition, const Matchers&... matchers) {
-		while (condition)
-			receive(matchers...);
-	}
-
 	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
 		return hidden::mailbox->match_until(until, matchers...);
 	}

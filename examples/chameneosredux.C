@@ -55,7 +55,7 @@ static std::mutex output_mutex;
 
 static void cleanup(size_t color_count) {
 	auto summary = 0ul;
-	receive_while(color_count,
+	while (color_count) receive(
 		[] (const handle& other, color) {
 			other.send(stop());
 		},
@@ -73,7 +73,7 @@ static void chameneos(color current, const handle& broker) {
 	const auto self = actor::self();
 	auto alive = true;
 	broker.send(self, current);
-	receive_while(alive,
+	while (alive) receive(
 		[&] (const handle& other, color colour) {
 			meetings++;
 			current = table[current][colour];
