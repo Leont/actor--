@@ -3,12 +3,12 @@
 #ifndef __ACTOR_H__
 #define __ACTOR_H__
 
-#include <thread>
-#include <mutex>
 #include <condition_variable>
-#include <queue>
-#include <memory>
 #include <list>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <thread>
 #include <tuple>
 
 namespace actor {
