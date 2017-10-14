@@ -51,7 +51,7 @@ namespace actor {
 			using args = std::tuple<std::decay_t<Args>...>;
 		};
 
-		template<typename Callback> static bool match_if(std::unique_ptr<message_base>&, const Callback&) {
+		template<typename Callback> static bool match_if(const std::unique_ptr<message_base>&, const Callback&) {
 			return false;
 		}
 		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message_base>& any, const Callback& callback, const Head& head, const Tail&... tail) {

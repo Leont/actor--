@@ -4,15 +4,15 @@
 #include <future>
 #include <actor.h>
 
-static std::string spell(size_t n) {
+static std::string spell(const size_t n) {
 	static const std::string numbers[] = { " zero", " one", " two", " three", " four", " five", " six", " seven", " eight", " nine" };
-	auto next = numbers[n % 10];
+	const auto next = numbers[n % 10];
 	return n / 10 ? spell(n / 10) + next : next;
 }
 
 enum color { blue = 0, red, yellow };
 
-static std::ostream& operator<<(std::ostream &s, const color &c ) {
+static inline std::ostream& operator<<(std::ostream& s, const color c) {
 	static const std::string names[] = { "blue", "red", "yellow" };
 	return s << names[c];
 }
@@ -24,14 +24,14 @@ static color table [3][3] = {
 };
 
 static void show_complements() {
-	for (auto i : { blue, red, yellow })
-		for (auto j : { blue, red, yellow })
+	for (const auto i : { blue, red, yellow })
+		for (const auto j : { blue, red, yellow })
 			std::cout << i << " + " << j << " -> " << (table[i][j]) << std::endl;
 }
 
 static void print_header(const std::initializer_list<color>& colors) {
 	std::cout << std::endl;
-	for (auto i : colors)
+	for (const auto i : colors)
 		std::cout << " " << i;
 	std::cout << std::endl;
 }
@@ -40,8 +40,8 @@ using namespace actor;
 
 struct stop {};
 
-static void broker(size_t meetings_count) {
-	for (auto i = 0u; i < meetings_count; ++i) {
+static void broker(const size_t meetings_count) {
+	for (auto i = 0ul; i < meetings_count; ++i) {
 		receive([](const handle& handle_left, color color_left) {
 			receive([&](const handle& handle_right, color color_right) {
 				handle_left.send(handle_right, color_right);
@@ -74,7 +74,7 @@ static void chameneos(color current, const handle& broker) {
 	auto alive = true;
 	broker.send(self, current);
 	while (alive) receive(
-		[&] (const handle& other, color colour) {
+		[&] (const handle& other, const color colour) {
 			meetings++;
 			current = table[current][colour];
 			if (other == self)
@@ -90,9 +90,9 @@ static void chameneos(color current, const handle& broker) {
 	);
 }
 
-static void run(const std::initializer_list<color>& colors, size_t count) {
+static void run(const std::initializer_list<color>& colors, const size_t count) {
 	print_header(colors);
-	for (auto color : colors)
+	for (const auto color : colors)
 		spawn(chameneos, color, self());
 	broker(count);
 	cleanup(colors.size());
@@ -100,8 +100,7 @@ static void run(const std::initializer_list<color>& colors, size_t count) {
 }
 
 int main (int argc, char ** argv) {
-	std::vector<std::string> args(argv + 1, argv + argc);
-	auto count = args.size() ? std::stoul(args.at(0)) : 10000ul;
+	const auto count = argc > 1 ? std::stoul(argv[1]) : 10000ul;
 	show_complements();
 	run({ blue, red, yellow }, count);
 	run({ blue, red, yellow, red, yellow, blue, red, yellow, red, blue }, count);
