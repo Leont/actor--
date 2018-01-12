@@ -15,24 +15,16 @@ namespace actor {
 	class queue {
 		class message {
 			public:
-			virtual void* get(const std::type_info& info) = 0;
 			virtual ~message() = default;
-			template<typename T> T* to() {
-				return static_cast<T*>(get(typeid(std::decay_t<T>)));
-			}
 		};
 		template<typename... Types> class message_impl : public message {
-			using tuple_type = std::tuple<Types...>;
-			tuple_type _value;
+			std::tuple<Types...> _value;
 			public:
 			template<typename... Args> message_impl(Args&&... value)
 			: _value(std::make_tuple(std::forward<Args>(value)...))
 			{}
-			virtual void* get(const std::type_info& info) {
-				if (typeid(tuple_type) == info)
-					return &_value;
-				else
-					return nullptr;
+			std::tuple<Types...>&& get() {
+				return std::move(_value);
 			}
 		};
 
@@ -40,18 +32,19 @@ namespace actor {
 			return std::make_unique<message_impl<std::decay_t<Types>...>>(std::forward<Types>(values)...);
 		}
 
-		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
+		template<typename T> struct message_for : public message_for<decltype(&T::operator())> {
 		};
-		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
-			using args = std::tuple<std::decay_t<Args>...>;
+		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
+			using type = message_impl<std::decay_t<Args>...>;
 		};
 
 		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, const Head& head, const Tail&... tail) {
-			using arg_type = typename function_traits<Head>::args;
-			if (arg_type* pointer = any->to<arg_type>()) {
-				arg_type value = std::move(*pointer);
+			using message_type = typename message_for<Head>::type;
+
+			if (message_type* real = dynamic_cast<message_type*>(any.get())) {
+				auto owner = std::move(any);
 				callback();
-				std::apply(head, std::move(value));
+				std::apply(head, real->get());
 				return true;
 			}
 			else if constexpr (sizeof...(Tail))
