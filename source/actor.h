@@ -194,7 +194,8 @@ namespace actor {
 			try {
 				function(std::forward<Args>(args)...);
 			}
-			catch(...) {
+			catch (exit) { }
+			catch (...) {
 				hidden::mailbox->mark_dead(error(), self(), std::current_exception());
 				return;
 			}
