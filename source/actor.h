@@ -13,18 +13,18 @@
 
 namespace actor {
 	class queue {
-		class message_base {
+		class message {
 			public:
 			virtual void* get(const std::type_info& info) = 0;
-			virtual ~message_base() {}
+			virtual ~message() = default;
 			template<typename T> T* to() {
 				return static_cast<T*>(get(typeid(std::decay_t<T>)));
 			}
 		};
-		template<typename T> class message : public message_base {
+		template<typename T> class message_impl : public message {
 			T _value;
 			public:
-			message(T value)
+			message_impl(T value)
 			: _value(std::move(value))
 			{}
 			virtual void* get(const std::type_info& info) {
@@ -34,8 +34,8 @@ namespace actor {
 					return nullptr;
 			}
 		};
-		template<typename T> static std::unique_ptr<message_base> make_message(T value) {
-			return std::make_unique<message<std::decay_t<T>>>(std::move(value));
+		template<typename T> static std::unique_ptr<message> make_message(T value) {
+			return std::make_unique<message_impl<std::decay_t<T>>>(std::move(value));
 		}
 
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
@@ -44,7 +44,7 @@ namespace actor {
 			using args = std::tuple<std::decay_t<Args>...>;
 		};
 
-		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message_base>& any, const Callback& callback, const Head& head, const Tail&... tail) {
+		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, const Head& head, const Tail&... tail) {
 			using arg_type = typename function_traits<Head>::args;
 			if (arg_type* pointer = any->to<arg_type>()) {
 				arg_type value = std::move(*pointer);
@@ -60,8 +60,8 @@ namespace actor {
 
 		std::mutex mutex;
 		std::condition_variable cond;
-		std::queue<std::unique_ptr<message_base>> incoming;
-		std::list<std::unique_ptr<message_base>> pending;
+		std::queue<std::unique_ptr<message>> incoming;
+		std::list<std::unique_ptr<message>> pending;
 		std::vector<std::weak_ptr<queue>> monitors;
 		std::atomic<bool> living;
 		queue(const queue&) = delete;
