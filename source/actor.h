@@ -38,13 +38,6 @@ namespace actor {
 			return std::make_unique<message<std::decay_t<T>>>(std::move(value));
 		}
 
-		template<class Function, class Tuple, std::size_t... I> static void apply_impl(Function&& f, Tuple&& t, std::index_sequence<I...>) {
-			f(std::get<I>(std::forward<Tuple>(t))...);
-		}
-		template<class Function, class Tuple> static void apply(Function&& f, Tuple&& t) {
-			apply_impl(std::forward<Function>(f), std::forward<Tuple>(t), std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>{});
-		}
-
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct function_traits<ReturnType(ClassType::*)(Args...) const> {
@@ -59,7 +52,7 @@ namespace actor {
 			if (arg_type* pointer = any->to<arg_type>()) {
 				arg_type value = std::move(*pointer);
 				callback();
-				apply(head, std::move(value));
+				std::apply(head, std::move(value));
 				return true;
 			}
 			else

@@ -1,4 +1,4 @@
-This is a header-only C++14 library implementing actor-based threading.
+This is a header-only C++17 library implementing actor-based threading.
 
 Messages can be send using the send method, taking zero or more arguments:
 

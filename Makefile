@@ -4,7 +4,7 @@ WARNINGS = -Wall -Weffc++ -Wshadow -Wextra
 DEBUG=-O3 -flto -Wl,--no-as-needed
 DFLAGS = -fPIC
 LDFLAGS = -pthread
-CXXFLAGS = --std=c++14 $(LDFLAGS) $(DEBUG) $(WARNINGS) $(DFLAGS) -Isource/
+CXXFLAGS = --std=c++17 $(LDFLAGS) $(DEBUG) $(WARNINGS) $(DFLAGS) -Isource/
 
 all: examples
 
