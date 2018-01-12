@@ -53,13 +53,14 @@ static std::mutex output_mutex;
 
 static void cleanup(size_t color_count) {
 	auto summary = 0ul;
-	while (color_count) receive(
+	receive_loop(
 		[] (const handle& other, color) {
 			other.send(stop());
 		},
 		[&] (size_t mismatch) {
 			summary += mismatch;
-			color_count--;
+			if (--color_count == 0)
+				throw stop();
 		}
 	);
 	std::lock_guard<std::mutex> lock(output_mutex);
@@ -69,9 +70,8 @@ static void cleanup(size_t color_count) {
 static void chameneos(color current, const handle& broker) {
 	auto meetings = 0ul, met_self = 0ul;
 	const auto self = actor::self();
-	auto alive = true;
 	broker.send(self, current);
-	while (alive) receive(
+	receive_loop(
 		[&] (const handle& other, const color colour) {
 			meetings++;
 			current = table[current][colour];
@@ -83,7 +83,7 @@ static void chameneos(color current, const handle& broker) {
 			std::lock_guard<std::mutex> lock(output_mutex);
 			std::cout << meetings << " " << spell(met_self) << std::endl;
 			broker.send(meetings);
-			alive = false;
+			throw stop();
 		}
 	);
 }

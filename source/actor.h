@@ -179,6 +179,14 @@ namespace actor {
 	struct error {};
 	struct stop {};
 
+	template<typename... Matchers> void receive_loop(const Matchers&... matchers) {
+		try {
+			while (1)
+				hidden::mailbox->match(matchers...);
+		}
+		catch (stop) { }
+	}
+
 	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
 		std::promise<handle> promise;
 		auto callback = [&promise](auto function, auto... args) {
