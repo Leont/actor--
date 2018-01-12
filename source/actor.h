@@ -21,21 +21,23 @@ namespace actor {
 				return static_cast<T*>(get(typeid(std::decay_t<T>)));
 			}
 		};
-		template<typename T> class message_impl : public message {
-			T _value;
+		template<typename... Types> class message_impl : public message {
+			using tuple_type = std::tuple<Types...>;
+			tuple_type _value;
 			public:
-			message_impl(T value)
-			: _value(std::move(value))
+			template<typename... Args> message_impl(Args&&... value)
+			: _value(std::make_tuple(std::forward<Args>(value)...))
 			{}
 			virtual void* get(const std::type_info& info) {
-				if (typeid(T) == info)
+				if (typeid(tuple_type) == info)
 					return &_value;
 				else
 					return nullptr;
 			}
 		};
-		template<typename T> static std::unique_ptr<message> make_message(T value) {
-			return std::make_unique<message_impl<std::decay_t<T>>>(std::move(value));
+
+		template<typename... Types> static std::unique_ptr<message> make_message(Types&&... values) {
+			return std::make_unique<message_impl<std::decay_t<Types>...>>(std::forward<Types>(values)...);
 		}
 
 		template<typename T> struct function_traits : public function_traits<decltype(&T::operator())> {
@@ -76,11 +78,11 @@ namespace actor {
 		, monitors()
 		, living(true)
 		{ }
-		template<typename T> void push(T&& value) {
+		template<typename... Types> void push(Types&&... values) {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (!living)
 				return;
-			incoming.push(make_message<T>(std::move(value)));
+			incoming.push(make_message(std::forward<Types>(values)...));
 			cond.notify_one();
 		}
 		template<typename... Args> void match(const Args&... matchers) {
@@ -98,16 +100,15 @@ namespace actor {
 		bool alive() const {
 			return living;
 		}
-		template<typename... Args> void mark_dead(Args&&... args) {
+		template<typename... Args> void mark_dead(const Args&... args) {
 			std::lock_guard<std::mutex> lock(mutex);
 			living = false;
 			pending.clear();
 			while (!incoming.empty())
 				incoming.pop();
-			const auto testament = std::make_tuple(std::forward<Args>(args)...);
 			for (const auto& monitor : monitors)
 				if (const auto strong = monitor.lock())
-					strong->push(testament);
+					strong->push(args...);
 			monitors.clear();
 		}
 		private:
@@ -140,7 +141,7 @@ namespace actor {
 		public:
 		explicit handle(const std::shared_ptr<queue>& other) noexcept : mailbox(other) {}
 		template<typename... Args> void send(Args&&... args) const {
-			mailbox->push(std::make_tuple(std::forward<Args>(args)...));
+			mailbox->push(std::forward<Args>(args)...);
 		}
 		bool monitor() const {
 			return mailbox->add_monitor(hidden::mailbox);
