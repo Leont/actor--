@@ -177,6 +177,7 @@ namespace actor {
 
 	struct exit {};
 	struct error {};
+	struct stop {};
 
 	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
 		std::promise<handle> promise;

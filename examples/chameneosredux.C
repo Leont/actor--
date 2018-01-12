@@ -38,8 +38,6 @@ static void print_header(const std::initializer_list<color>& colors) {
 
 using namespace actor;
 
-struct stop {};
-
 static void broker(const size_t meetings_count) {
 	for (auto i = 0ul; i < meetings_count; ++i) {
 		receive([](const handle& handle_left, color color_left) {
