@@ -44,9 +44,6 @@ namespace actor {
 			using args = std::tuple<std::decay_t<Args>...>;
 		};
 
-		template<typename Callback> static bool match_if(const std::unique_ptr<message_base>&, const Callback&) {
-			return false;
-		}
 		template<typename Callback, typename Head, typename... Tail> static bool match_if(std::unique_ptr<message_base>& any, const Callback& callback, const Head& head, const Tail&... tail) {
 			using arg_type = typename function_traits<Head>::args;
 			if (arg_type* pointer = any->to<arg_type>()) {
@@ -55,8 +52,10 @@ namespace actor {
 				std::apply(head, std::move(value));
 				return true;
 			}
-			else
+			else if constexpr (sizeof...(Tail))
 				return match_if(any, callback, tail...);
+			else
+				return false;
 		}
 
 		std::mutex mutex;
