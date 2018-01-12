@@ -158,7 +158,7 @@ namespace actor {
 			return left.mailbox != right.mailbox;
 		}
 		friend bool operator<(const handle& left, const handle& right) {
-			return left.mailbox.get() < right.mailbox.get();
+			return left.mailbox < right.mailbox;
 		}
 	};
 
