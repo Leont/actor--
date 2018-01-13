@@ -188,6 +188,10 @@ namespace actor {
 		catch (stop) { }
 	}
 
+	static inline void leave_loop() {
+		throw stop();
+	}
+
 	template<typename Func, typename... Args> handle spawn(Func&& func, Args&&... params) {
 		std::promise<handle> promise;
 		auto callback = [&promise](auto function, auto... args) {

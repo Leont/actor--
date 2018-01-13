@@ -45,7 +45,7 @@ static void broker(const size_t meetings_count) {
 			handle_right.send(handle_left, color_left);
 		});
 		if (++seen == meetings_count)
-			throw stop();
+			leave_loop();
 	});
 }
 
@@ -61,7 +61,7 @@ static void cleanup(size_t color_count) {
 			if (--color_count == 0) {
 				std::lock_guard<std::mutex> lock(output_mutex);
 				std::cout << spell(summary) << std::endl;
-				throw stop();
+				leave_loop();
 			}
 		}
 	);
@@ -83,7 +83,7 @@ static void chameneos(color current, const handle& broker) {
 			std::lock_guard<std::mutex> lock(output_mutex);
 			std::cout << meetings << " " << spell(met_self) << std::endl;
 			broker.send(meetings);
-			throw stop();
+			leave_loop();
 		}
 	);
 }
