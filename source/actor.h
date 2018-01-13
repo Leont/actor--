@@ -23,8 +23,8 @@ namespace actor {
 			template<typename... Args> message_impl(Args&&... value)
 			: _value(std::make_tuple(std::forward<Args>(value)...))
 			{}
-			std::tuple<Types...>&& get() {
-				return std::move(_value);
+			template<typename Handler> void apply(Handler& handler) {
+				return std::apply(handler, std::move(_value));
 			}
 		};
 
@@ -47,7 +47,7 @@ namespace actor {
 			if (message_type* real = dynamic_cast<message_type*>(any.get())) {
 				auto owner = std::move(any);
 				callback();
-				std::apply(std::get<position>(handlers), real->get());
+				real->apply(std::get<position>(handlers));
 				return true;
 			}
 			else if constexpr (position + 1 < std::tuple_size<Tuple>::value)
