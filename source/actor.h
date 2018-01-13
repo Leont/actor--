@@ -37,6 +37,9 @@ namespace actor {
 		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
 			using type = message_impl<std::decay_t<Args>...>;
 		};
+		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...)> {
+			using type = message_impl<std::decay_t<Args>...>;
+		};
 
 		template<size_t position = 0, typename Callback, typename Tuple> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, Tuple& handlers) {
 			using message_type = typename message_for<std::decay_t<typename std::tuple_element<position, Tuple>::type>>::type;
