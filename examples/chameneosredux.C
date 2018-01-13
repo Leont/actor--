@@ -39,32 +39,32 @@ static void print_header(const std::initializer_list<color>& colors) {
 using namespace actor;
 
 static void broker(const size_t meetings_count) {
-	for (auto i = 0ul; i < meetings_count; ++i) {
-		receive([](const handle& handle_left, color color_left) {
-			receive([&](const handle& handle_right, color color_right) {
-				handle_left.send(handle_right, color_right);
-				handle_right.send(handle_left, color_left);
-			});
+	receive_loop([meetings_count, seen = 0ul](const handle& handle_left, color color_left) mutable {
+		receive([&](const handle& handle_right, color color_right) {
+			handle_left.send(handle_right, color_right);
+			handle_right.send(handle_left, color_left);
 		});
-	}
+		if (++seen == meetings_count)
+			throw stop();
+	});
 }
 
 static std::mutex output_mutex;
 
 static void cleanup(size_t color_count) {
-	auto summary = 0ul;
 	receive_loop(
 		[] (const handle& other, color) {
 			other.send(stop());
 		},
-		[&] (size_t mismatch) {
+		[color_count, summary = 0ul] (size_t mismatch) mutable {
 			summary += mismatch;
-			if (--color_count == 0)
+			if (--color_count == 0) {
+				std::lock_guard<std::mutex> lock(output_mutex);
+				std::cout << spell(summary) << std::endl;
 				throw stop();
+			}
 		}
 	);
-	std::lock_guard<std::mutex> lock(output_mutex);
-	std::cout << spell(summary) << std::endl;
 }
 
 static void chameneos(color current, const handle& broker) {
