@@ -28,10 +28,6 @@ namespace actor {
 			}
 		};
 
-		template<typename... Types> static std::unique_ptr<message> make_message(Types&&... values) {
-			return std::make_unique<message_impl<std::decay_t<Types>...>>(std::forward<Types>(values)...);
-		}
-
 		template<typename T> struct message_for : public message_for<decltype(&T::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
@@ -78,7 +74,7 @@ namespace actor {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (!living)
 				return;
-			incoming.push(make_message(std::forward<Types>(values)...));
+			incoming.push(std::make_unique<message_impl<std::decay_t<Types>...>>(std::forward<Types>(values)...));
 			cond.notify_one();
 		}
 		template<typename Tuple> void match(Tuple& matchers) {
