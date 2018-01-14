@@ -18,13 +18,13 @@ namespace actor {
 			virtual ~message() = default;
 		};
 		template<typename... Types> class message_impl : public message {
-			std::tuple<Types...> _value;
+			std::tuple<Types...> tuple;
 			public:
 			template<typename... Args> message_impl(Args&&... value)
-			: _value(std::make_tuple(std::forward<Args>(value)...))
+			: tuple(std::make_tuple(std::forward<Args>(value)...))
 			{}
 			template<typename Handler> void apply(Handler& handler) {
-				return std::apply(handler, std::move(_value));
+				return std::apply(handler, std::move(tuple));
 			}
 		};
 
