@@ -46,17 +46,16 @@ namespace actor {
 			matcher(Types&&... matchers)
 			: tuple(std::make_tuple(std::forward<Types>(matchers)...))
 			{}
-			template<size_t position = 0, typename Callback> bool match(std::unique_ptr<message>& any, const Callback& callback) {
+			template<size_t position = 0> bool match(std::unique_ptr<message>& any) {
 				using message_type = typename message_for<std::decay_t<std::tuple_element_t<position, tuple_type>>>::type;
 
 				if (message_type* real = dynamic_cast<message_type*>(any.get())) {
 					auto owner = std::move(any);
-					callback();
 					real->apply(std::get<position>(tuple));
 					return true;
 				}
 				else if constexpr (position + 1 < std::tuple_size<tuple_type>::value)
-					return match<position+1>(any, callback);
+					return match<position+1>(any);
 				else
 					return false;
 			}
@@ -114,21 +113,28 @@ namespace actor {
 			monitors.clear();
 		}
 		private:
-		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher&& matchers) {
-			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (matchers.match(*current, [&] { pending.erase(current); }))
-					return true;
+		template<typename Waiter> std::unique_ptr<message> pop_incoming(const Waiter& waiter) {
 			std::unique_lock<std::mutex> lock(mutex);
-			while (1) {
-				if (!waiter(lock))
-					return false;
-				else if (matchers.match(incoming.front(), [&] { incoming.pop(); lock.unlock(); }))
+			if (!waiter(lock))
+				return nullptr;
+			std::unique_ptr<message> next = std::move(incoming.front());
+			incoming.pop();
+			return next;
+		}
+		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher&& matchers) {
+			for (auto current = pending.begin(); current != pending.end(); ++current) {
+				if (!*current)
+					pending.erase(current);
+				else if (matchers.match(*current))
 					return true;
-				else {
-					pending.push_back(std::move(incoming.front()));
-					incoming.pop();
-				}
 			}
+			while (std::unique_ptr<message> next = pop_incoming(waiter)) {
+				if (matchers.match(next))
+					return true;
+				else
+					pending.push_back(std::move(next));
+			}
+			return false;
 		}
 	};
 
