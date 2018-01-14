@@ -38,20 +38,29 @@ namespace actor {
 			using type = message_t<Args...>;
 		};
 
-		template<size_t position = 0, typename Callback, typename Tuple> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, Tuple& handlers) {
-			using message_type = typename message_for<std::decay_t<std::tuple_element_t<position, Tuple>>>::type;
+		template<typename... Types> class matcher {
+			using tuple_type = std::tuple<Types&&...>;
+			static_assert(std::tuple_size<tuple_type>::value != 0, "Can't call receive without arguments");
+			tuple_type tuple;
+			public:
+			matcher(Types&&... matchers)
+			: tuple(std::make_tuple(std::forward<Types>(matchers)...))
+			{}
+			template<size_t position = 0, typename Callback> bool match(std::unique_ptr<message>& any, const Callback& callback) {
+				using message_type = typename message_for<std::decay_t<std::tuple_element_t<position, tuple_type>>>::type;
 
-			if (message_type* real = dynamic_cast<message_type*>(any.get())) {
-				auto owner = std::move(any);
-				callback();
-				real->apply(std::get<position>(handlers));
-				return true;
+				if (message_type* real = dynamic_cast<message_type*>(any.get())) {
+					auto owner = std::move(any);
+					callback();
+					real->apply(std::get<position>(tuple));
+					return true;
+				}
+				else if constexpr (position + 1 < std::tuple_size<tuple_type>::value)
+					return match<position+1>(any, callback);
+				else
+					return false;
 			}
-			else if constexpr (position + 1 < std::tuple_size<Tuple>::value)
-				return match_if<position+1>(any, callback, handlers);
-			else
-				return false;
-		}
+		};
 
 		std::mutex mutex;
 		std::condition_variable cond;
@@ -78,10 +87,10 @@ namespace actor {
 			incoming.push(std::make_unique<message_t<Types...>>(std::forward<Types>(values)...));
 			cond.notify_one();
 		}
-		template<typename Tuple> void match(Tuple& matchers) {
+		template<typename Matcher> void match(Matcher& matchers) {
 			match_with([this](std::unique_lock<std::mutex>& lock) -> bool { cond.wait(lock, [&] { return !incoming.empty(); }); return true; }, matchers);
 		}
-		template<typename Clock, typename Rep, typename Period, typename Tuple> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Tuple& matchers) {
+		template<typename Clock, typename Rep, typename Period, typename Matcher> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matcher& matchers) {
 			return match_with([this, &until](std::unique_lock<std::mutex>& lock) { return cond.wait_until(lock, until, [&] { return !incoming.empty(); }); }, matchers);
 		}
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
@@ -105,16 +114,15 @@ namespace actor {
 			monitors.clear();
 		}
 		private:
-		template<typename Waiter, typename Tuple> bool match_with(const Waiter& waiter, Tuple& matchers) {
-			static_assert(std::tuple_size<Tuple>::value != 0, "Can't call receive without arguments");
+		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher& matchers) {
 			for (auto current = pending.begin(); current != pending.end(); ++current)
-				if (match_if<0>(*current, [&] { pending.erase(current); }, matchers))
+				if (matchers.match(*current, [&] { pending.erase(current); }))
 					return true;
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
 				if (!waiter(lock))
 					return false;
-				else if (match_if<0>(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
+				else if (matchers.match(incoming.front(), [&] { incoming.pop(); lock.unlock(); }))
 					return true;
 				else {
 					pending.push_back(std::move(incoming.front()));
@@ -163,12 +171,12 @@ namespace actor {
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {
-		auto matching = std::forward_as_tuple(std::forward<Matchers>(matchers)...);
+		auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
 		hidden::mailbox->match(matching);
 	}
 
 	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
-		auto matching = std::forward_as_tuple(std::forward<Matchers>(matchers)...);
+		auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
 		return hidden::mailbox->match_until(until, matching);
 	}
 
@@ -182,7 +190,7 @@ namespace actor {
 
 	template<typename... Matchers> void receive_loop(Matchers&&... matchers) {
 		try {
-			auto matching = std::forward_as_tuple(std::forward<Matchers>(matchers)...);
+			auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
 			while (1)
 				hidden::mailbox->match(matching);
 		}
