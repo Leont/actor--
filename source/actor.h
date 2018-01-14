@@ -27,14 +27,15 @@ namespace actor {
 				return std::apply(handler, std::move(tuple));
 			}
 		};
+		template<typename... Types> using message_t = message_impl<std::decay_t<Types>...>;
 
 		template<typename T> struct message_for : public message_for<decltype(&T::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
-			using type = message_impl<std::decay_t<Args>...>;
+			using type = message_t<Args...>;
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...)> {
-			using type = message_impl<std::decay_t<Args>...>;
+			using type = message_t<Args...>;
 		};
 
 		template<size_t position = 0, typename Callback, typename Tuple> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, Tuple& handlers) {
@@ -74,7 +75,7 @@ namespace actor {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (!living)
 				return;
-			incoming.push(std::make_unique<message_impl<std::decay_t<Types>...>>(std::forward<Types>(values)...));
+			incoming.push(std::make_unique<message_t<Types...>>(std::forward<Types>(values)...));
 			cond.notify_one();
 		}
 		template<typename Tuple> void match(Tuple& matchers) {
