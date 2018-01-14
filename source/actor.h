@@ -39,7 +39,7 @@ namespace actor {
 		};
 
 		template<size_t position = 0, typename Callback, typename Tuple> static bool match_if(std::unique_ptr<message>& any, const Callback& callback, Tuple& handlers) {
-			using message_type = typename message_for<std::decay_t<typename std::tuple_element<position, Tuple>::type>>::type;
+			using message_type = typename message_for<std::decay_t<std::tuple_element_t<position, Tuple>>>::type;
 
 			if (message_type* real = dynamic_cast<message_type*>(any.get())) {
 				auto owner = std::move(any);
