@@ -79,10 +79,10 @@ namespace actor {
 			cond.notify_one();
 		}
 		template<typename Tuple> void match(Tuple& matchers) {
-			match_with([this](auto& lock, const auto& check) -> bool { cond.wait(lock, check); return true; }, matchers);
+			match_with([this](std::unique_lock<std::mutex>& lock) -> bool { cond.wait(lock, [&] { return !incoming.empty(); }); return true; }, matchers);
 		}
 		template<typename Clock, typename Rep, typename Period, typename Tuple> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Tuple& matchers) {
-			return match_with([this, &until](auto& lock, const auto& check) { return cond.wait_until(lock, until, check); }, matchers);
+			return match_with([this, &until](std::unique_lock<std::mutex>& lock) { return cond.wait_until(lock, until, [&] { return !incoming.empty(); }); }, matchers);
 		}
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -112,7 +112,7 @@ namespace actor {
 					return true;
 			std::unique_lock<std::mutex> lock(mutex);
 			while (1) {
-				if (!waiter(lock, [&] { return !incoming.empty(); }))
+				if (!waiter(lock))
 					return false;
 				else if (match_if<0>(incoming.front(), [&] { incoming.pop(); lock.unlock(); }, matchers))
 					return true;
