@@ -49,7 +49,12 @@ static void broker(const size_t meetings_count) {
 	});
 }
 
-static std::mutex output_mutex;
+
+template<typename... Arguments> static void print(Arguments&&... arguments) {
+	static std::mutex output_mutex;
+	std::lock_guard<std::mutex> lock(output_mutex);
+	(std::cout << ... << arguments) << std::endl;
+}
 
 static void cleanup(size_t color_count) {
 	receive_loop(
@@ -59,8 +64,7 @@ static void cleanup(size_t color_count) {
 		[color_count, summary = 0ul] (size_t mismatch) mutable {
 			summary += mismatch;
 			if (--color_count == 0) {
-				std::lock_guard<std::mutex> lock(output_mutex);
-				std::cout << spell(summary) << std::endl;
+				print(spell(summary));
 				leave_loop();
 			}
 		}
@@ -80,8 +84,7 @@ static void chameneos(color current, const handle& broker) {
 			broker.send(self, current);
 		},
 		[&] (stop) {
-			std::lock_guard<std::mutex> lock(output_mutex);
-			std::cout << meetings << " " << spell(met_self) << std::endl;
+			print(meetings, " ", spell(met_self));
 			broker.send(meetings);
 			leave_loop();
 		}
