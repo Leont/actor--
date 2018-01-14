@@ -87,11 +87,11 @@ namespace actor {
 			incoming.push(std::make_unique<message_t<Types...>>(std::forward<Types>(values)...));
 			cond.notify_one();
 		}
-		template<typename Matcher> void match(Matcher& matchers) {
-			match_with([this](std::unique_lock<std::mutex>& lock) -> bool { cond.wait(lock, [&] { return !incoming.empty(); }); return true; }, matchers);
+		template<typename Matcher> void match(Matcher&& matchers) {
+			match_with([this](std::unique_lock<std::mutex>& lock) -> bool { cond.wait(lock, [&] { return !incoming.empty(); }); return true; }, std::forward<Matcher>(matchers));
 		}
-		template<typename Clock, typename Rep, typename Period, typename Matcher> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matcher& matchers) {
-			return match_with([this, &until](std::unique_lock<std::mutex>& lock) { return cond.wait_until(lock, until, [&] { return !incoming.empty(); }); }, matchers);
+		template<typename Clock, typename Rep, typename Period, typename Matcher> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matcher&& matchers) {
+			return match_with([this, &until](std::unique_lock<std::mutex>& lock) { return cond.wait_until(lock, until, [&] { return !incoming.empty(); }); }, std::forward<Matcher>(matchers));
 		}
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -114,7 +114,7 @@ namespace actor {
 			monitors.clear();
 		}
 		private:
-		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher& matchers) {
+		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher&& matchers) {
 			for (auto current = pending.begin(); current != pending.end(); ++current)
 				if (matchers.match(*current, [&] { pending.erase(current); }))
 					return true;
@@ -171,13 +171,11 @@ namespace actor {
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {
-		auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
-		hidden::mailbox->match(matching);
+		hidden::mailbox->match(queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
-		auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
-		return hidden::mailbox->match_until(until, matching);
+		return hidden::mailbox->match_until(until, queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Rep, typename Period, typename... Matchers> bool receive_for(const std::chrono::duration<Rep, Period>& until, Matchers&&... matchers) {
