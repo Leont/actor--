@@ -29,7 +29,7 @@ namespace actor {
 		};
 		template<typename... Types> using message_t = message_impl<std::decay_t<Types>...>;
 
-		template<typename T> struct message_for : public message_for<decltype(&T::operator())> {
+		template<typename T> struct message_for : public message_for<decltype(&std::remove_reference_t<T>::operator())> {
 		};
 		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
 			using type = message_t<Args...>;
@@ -43,14 +43,13 @@ namespace actor {
 			static_assert(elements != 0, "Can't call receive without arguments");
 			using tuple_type = std::tuple<Types...>;
 			tuple_type tuple;
+			template<size_t position> using message_type = typename message_for<std::tuple_element_t<position, tuple_type>>::type;
 			public:
 			matcher(Types... matchers)
 			: tuple(std::move(matchers)...)
 			{}
 			template<size_t position = 0> bool match(std::unique_ptr<message>& any) {
-				using message_type = typename message_for<std::decay_t<std::tuple_element_t<position, tuple_type>>>::type;
-
-				if (message_type* real = dynamic_cast<message_type*>(any.get())) {
+				if (auto* real = dynamic_cast<message_type<position>*>(any.get())) {
 					auto owner = std::move(any);
 					real->apply(std::get<position>(tuple));
 					return true;
