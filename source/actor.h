@@ -39,8 +39,9 @@ namespace actor {
 		};
 
 		template<typename... Types> class matcher {
+			static constexpr size_t elements = sizeof...(Types);
+			static_assert(elements != 0, "Can't call receive without arguments");
 			using tuple_type = std::tuple<Types...>;
-			static_assert(std::tuple_size<tuple_type>::value != 0, "Can't call receive without arguments");
 			tuple_type tuple;
 			public:
 			matcher(Types... matchers)
@@ -54,7 +55,7 @@ namespace actor {
 					real->apply(std::get<position>(tuple));
 					return true;
 				}
-				else if constexpr (position + 1 < std::tuple_size<tuple_type>::value)
+				else if constexpr (position + 1 < elements)
 					return match<position+1>(any);
 				else
 					return false;
