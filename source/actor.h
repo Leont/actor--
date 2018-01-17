@@ -93,7 +93,7 @@ namespace actor {
 			};
 			match_with(std::forward<Matcher>(matchers), waiter);
 		}
-		template<typename Clock, typename Rep, typename Period, typename Matcher> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matcher&& matchers) {
+		template<typename Until, typename Matcher> bool match_until(const Until& until, Matcher&& matchers) {
 			auto waiter = [this, &until](std::unique_lock<std::mutex>& lock) {
 				return cond.wait_until(lock, until, [this] { return !incoming.empty(); });
 			};
@@ -187,11 +187,11 @@ namespace actor {
 		hidden::mailbox->match(queue::matcher<Matchers...>(std::forward<Matchers>(matchers)...));
 	}
 
-	template<typename Clock, typename Rep, typename Period, typename... Matchers> bool receive_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matchers&&... matchers) {
+	template<typename Until, typename... Matchers> bool receive_until(const Until& until, Matchers&&... matchers) {
 		return hidden::mailbox->match_until(until, queue::matcher<Matchers...>(std::forward<Matchers>(matchers)...));
 	}
 
-	template<typename Rep, typename Period, typename... Matchers> bool receive_for(const std::chrono::duration<Rep, Period>& until, Matchers&&... matchers) {
+	template<typename Duration, typename... Matchers> bool receive_for(const Duration& until, Matchers&&... matchers) {
 		return receive_until(std::chrono::steady_clock::now() + until, std::forward<Matchers>(matchers)...);
 	}
 
