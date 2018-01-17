@@ -20,8 +20,8 @@ namespace actor {
 		template<typename... Types> class message_impl : public message {
 			std::tuple<Types...> tuple;
 			public:
-			template<typename... Args> message_impl(Args&&... value)
-			: tuple(std::make_tuple(std::forward<Args>(value)...))
+			message_impl(Types... value)
+			: tuple(std::forward<Types>(value)...)
 			{}
 			template<typename Handler> void apply(Handler& handler) {
 				return std::apply(handler, std::move(tuple));
