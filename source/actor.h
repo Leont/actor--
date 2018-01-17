@@ -87,10 +87,17 @@ namespace actor {
 			cond.notify_one();
 		}
 		template<typename Matcher> void match(Matcher&& matchers) {
-			match_with([this](std::unique_lock<std::mutex>& lock) -> bool { cond.wait(lock, [&] { return !incoming.empty(); }); return true; }, std::forward<Matcher>(matchers));
+			auto waiter = [this](std::unique_lock<std::mutex>& lock) {
+				cond.wait(lock, [this] { return !incoming.empty(); });
+				return true;
+			};
+			match_with(std::forward<Matcher>(matchers), waiter);
 		}
 		template<typename Clock, typename Rep, typename Period, typename Matcher> bool match_until(const std::chrono::time_point<Clock, std::chrono::duration<Rep, Period>>& until, Matcher&& matchers) {
-			return match_with([this, &until](std::unique_lock<std::mutex>& lock) { return cond.wait_until(lock, until, [&] { return !incoming.empty(); }); }, std::forward<Matcher>(matchers));
+			auto waiter = [this, &until](std::unique_lock<std::mutex>& lock) {
+				return cond.wait_until(lock, until, [this] { return !incoming.empty(); });
+			};
+			return match_with(std::forward<Matcher>(matchers), waiter);
 		}
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
@@ -121,7 +128,7 @@ namespace actor {
 			incoming.pop();
 			return next;
 		}
-		template<typename Waiter, typename Matcher> bool match_with(const Waiter& waiter, Matcher&& matchers) {
+		template<typename Matcher, typename Waiter> bool match_with(Matcher&& matchers, const Waiter& waiter) {
 			for (auto current = pending.begin(); current != pending.end(); ++current) {
 				if (!*current)
 					pending.erase(current);
