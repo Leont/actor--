@@ -38,6 +38,14 @@ namespace actor {
 			using type = message_t<Args...>;
 		};
 
+		template<typename Derived, typename Base> static std::unique_ptr<Derived> dynamic_pointer_cast(std::unique_ptr<Base>& input) {
+			if (Derived* result = dynamic_cast<Derived*>(input.get())) {
+				input.release();
+				return std::unique_ptr<Derived>(result);
+			}
+			return nullptr;
+		}
+
 		template<typename... Types> class matcher {
 			static constexpr size_t elements = sizeof...(Types);
 			static_assert(elements != 0, "Can't call receive without arguments");
@@ -48,14 +56,13 @@ namespace actor {
 			matcher(Types... matchers)
 			: tuple(std::move(matchers)...)
 			{}
-			template<size_t position = 0> bool match(std::unique_ptr<message>& any) {
-				if (auto* real = dynamic_cast<message_type<position>*>(any.get())) {
-					auto owner = std::move(any);
-					real->apply(std::get<position>(tuple));
+			template<size_t position = 0> bool match(std::unique_ptr<message>& msg) {
+				if (auto owner = dynamic_pointer_cast<message_type<position>>(msg)) {
+					owner->apply(std::get<position>(tuple));
 					return true;
 				}
 				else if constexpr (position + 1 < elements)
-					return match<position+1>(any);
+					return match<position + 1>(msg);
 				else
 					return false;
 			}
