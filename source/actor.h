@@ -197,11 +197,11 @@ namespace actor {
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {
-		hidden::mailbox->match(queue::matcher<Matchers...>(std::forward<Matchers>(matchers)...));
+		hidden::mailbox->match(queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Until, typename... Matchers> bool receive_until(const Until& until, Matchers&&... matchers) {
-		return hidden::mailbox->match_until(until, queue::matcher<Matchers...>(std::forward<Matchers>(matchers)...));
+		return hidden::mailbox->match_until(until, queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Duration, typename... Matchers> bool receive_for(const Duration& until, Matchers&&... matchers) {
@@ -214,7 +214,7 @@ namespace actor {
 
 	template<typename... Matchers> void receive_loop(Matchers&&... matchers) {
 		try {
-			auto matching = queue::matcher<Matchers...>(std::forward<Matchers>(matchers)...);
+			auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
 			while (1)
 				hidden::mailbox->match(matching);
 		}
