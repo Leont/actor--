@@ -5,9 +5,9 @@
 #include <actor.h>
 
 static std::string spell(const size_t n) {
-	static const std::string numbers[] = { " zero", " one", " two", " three", " four", " five", " six", " seven", " eight", " nine" };
+	static const std::string numbers[] = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
 	const auto next = numbers[n % 10];
-	return n / 10 ? spell(n / 10) + next : next;
+	return n / 10 ? spell(n / 10) + " " + next : next;
 }
 
 enum color { blue = 0, red, yellow };
