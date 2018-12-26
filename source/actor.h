@@ -19,6 +19,7 @@ namespace actor {
 		};
 		template<typename... Types> class message_impl : public message {
 			std::tuple<Types...> tuple;
+
 			public:
 			message_impl(Types... value)
 			: tuple(std::forward<Types>(value)...)
@@ -31,10 +32,10 @@ namespace actor {
 
 		template<typename T> struct message_for : public message_for<decltype(&std::remove_reference_t<T>::operator())> {
 		};
-		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...) const> {
+		template<typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType (ClassType::*)(Args...) const> {
 			using type = message_t<Args...>;
 		};
-		template <typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType(ClassType::*)(Args...)> {
+		template<typename ClassType, typename ReturnType, typename... Args> struct message_for<ReturnType (ClassType::*)(Args...)> {
 			using type = message_t<Args...>;
 		};
 
@@ -52,10 +53,12 @@ namespace actor {
 			using tuple_type = std::tuple<Types...>;
 			tuple_type tuple;
 			template<size_t position> using message_type = typename message_for<std::tuple_element_t<position, tuple_type>>::type;
+
 			public:
 			matcher(Types... matchers)
 			: tuple(std::move(matchers)...)
 			{}
+
 			template<size_t position = 0> bool match(std::unique_ptr<message>& msg) {
 				if (auto owner = dynamic_pointer_cast<message_type<position>>(msg)) {
 					owner->apply(std::get<position>(tuple));
@@ -74,6 +77,7 @@ namespace actor {
 		std::list<std::unique_ptr<message>> pending;
 		std::vector<std::weak_ptr<queue>> monitors;
 		std::atomic<bool> living;
+
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
 
@@ -106,6 +110,7 @@ namespace actor {
 			};
 			return match_with(std::forward<Matcher>(matchers), waiter);
 		}
+
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
 			if (living)
@@ -126,6 +131,7 @@ namespace actor {
 					strong->push(args...);
 			monitors.clear();
 		}
+
 		private:
 		template<typename Waiter> std::unique_ptr<message> pop_incoming(const Waiter& waiter) {
 			std::unique_lock<std::mutex> lock(mutex);
@@ -158,8 +164,12 @@ namespace actor {
 
 	class handle {
 		std::shared_ptr<queue> mailbox;
+
 		public:
-		explicit handle(const std::shared_ptr<queue>& other) noexcept : mailbox(other) {}
+		explicit handle(const std::shared_ptr<queue>& other) noexcept
+		: mailbox(other)
+		{}
+
 		template<typename... Args> void send(Args&&... args) const {
 			mailbox->push(std::forward<Args>(args)...);
 		}
@@ -169,9 +179,11 @@ namespace actor {
 		bool alive() const noexcept {
 			return mailbox->alive();
 		}
+
 		friend void swap(handle& left, handle& right) noexcept {
 			swap(left.mailbox, right.mailbox);
 		}
+
 		friend bool operator==(const handle& left, const handle& right) {
 			return left.mailbox == right.mailbox;
 		}
@@ -212,7 +224,8 @@ namespace actor {
 			while (1)
 				hidden::mailbox->match(matching);
 		}
-		catch (stop) { }
+		catch (stop) {
+		}
 	}
 
 	static inline void leave_loop() {
@@ -226,7 +239,8 @@ namespace actor {
 			try {
 				function(std::forward<Args>(args)...);
 			}
-			catch (exit) { }
+			catch (exit) {
+			}
 			catch (...) {
 				hidden::mailbox->mark_dead(error(), self(), std::current_exception());
 				return;
@@ -236,6 +250,6 @@ namespace actor {
 		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
 		return promise.get_future().get();
 	}
-}
+} // namespace actor
 
 #endif
