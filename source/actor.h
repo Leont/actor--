@@ -117,7 +117,7 @@ namespace actor {
 				monitors.push_back(monitor);
 			return living;
 		}
-		bool alive() const {
+		bool alive() const noexcept {
 			return living;
 		}
 		template<typename... Args> void mark_dead(const Args&... args) {
@@ -184,13 +184,13 @@ namespace actor {
 			swap(left.mailbox, right.mailbox);
 		}
 
-		friend bool operator==(const handle& left, const handle& right) {
+		friend bool operator==(const handle& left, const handle& right) noexcept {
 			return left.mailbox == right.mailbox;
 		}
-		friend bool operator!=(const handle& left, const handle& right) {
+		friend bool operator!=(const handle& left, const handle& right) noexcept {
 			return left.mailbox != right.mailbox;
 		}
-		friend bool operator<(const handle& left, const handle& right) {
+		friend bool operator<(const handle& left, const handle& right) noexcept {
 			return left.mailbox < right.mailbox;
 		}
 	};
@@ -198,7 +198,7 @@ namespace actor {
 	namespace hidden {
 		extern const thread_local handle self_var(hidden::mailbox);
 	}
-	static inline const handle& self() {
+	static inline const handle& self() noexcept {
 		return hidden::self_var;
 	}
 
