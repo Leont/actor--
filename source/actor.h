@@ -76,23 +76,17 @@ namespace actor {
 		std::queue<std::unique_ptr<message>> incoming;
 		std::list<std::unique_ptr<message>> pending;
 		std::vector<std::weak_ptr<queue>> monitors;
-		std::atomic<bool> living;
+		std::atomic<bool> dead;
 
 		queue(const queue&) = delete;
 		queue& operator=(const queue&) = delete;
 
 		public:
-		queue()
-		: mutex()
-		, cond()
-		, incoming()
-		, pending()
-		, monitors()
-		, living(true)
-		{ }
+		queue() = default;
+
 		template<typename... Types> void push(Types&&... values) {
 			std::lock_guard<std::mutex> lock(mutex);
-			if (!living)
+			if (dead)
 				return;
 			incoming.push(std::make_unique<message_t<Types...>>(std::forward<Types>(values)...));
 			cond.notify_one();
@@ -113,16 +107,16 @@ namespace actor {
 
 		bool add_monitor(const std::shared_ptr<queue>& monitor) {
 			std::lock_guard<std::mutex> lock(mutex);
-			if (living)
+			if (!dead)
 				monitors.push_back(monitor);
-			return living;
+			return !dead;
 		}
 		bool alive() const noexcept {
-			return living;
+			return !dead;
 		}
 		template<typename... Args> void mark_dead(const Args&... args) {
 			std::lock_guard<std::mutex> lock(mutex);
-			living = false;
+			dead = true;
 			pending.clear();
 			while (!incoming.empty())
 				incoming.pop();
