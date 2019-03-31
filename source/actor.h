@@ -152,8 +152,8 @@ namespace actor {
 		}
 	};
 
-	namespace hidden {
-		extern const thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
+	namespace {
+		inline thread_local std::shared_ptr<queue> mailbox = std::make_shared<queue>();
 	}
 
 	class handle {
@@ -168,7 +168,7 @@ namespace actor {
 			mailbox->push(std::forward<Args>(args)...);
 		}
 		bool monitor() const {
-			return mailbox->add_monitor(hidden::mailbox);
+			return mailbox->add_monitor(mailbox);
 		}
 		bool alive() const noexcept {
 			return mailbox->alive();
@@ -189,19 +189,17 @@ namespace actor {
 		}
 	};
 
-	namespace hidden {
-		extern const thread_local handle self_var(hidden::mailbox);
-	}
-	static inline const handle& self() noexcept {
-		return hidden::self_var;
+	static inline handle self() noexcept {
+		static thread_local handle self_var(mailbox);
+		return self_var;
 	}
 
 	template<typename... Matchers> void receive(Matchers&&... matchers) {
-		hidden::mailbox->match(queue::matcher(std::forward<Matchers>(matchers)...));
+		mailbox->match(queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Until, typename... Matchers> bool receive_until(const Until& until, Matchers&&... matchers) {
-		return hidden::mailbox->match_until(until, queue::matcher(std::forward<Matchers>(matchers)...));
+		return mailbox->match_until(until, queue::matcher(std::forward<Matchers>(matchers)...));
 	}
 
 	template<typename Duration, typename... Matchers> bool receive_for(const Duration& until, Matchers&&... matchers) {
@@ -216,7 +214,7 @@ namespace actor {
 		try {
 			auto matching = queue::matcher(std::forward<Matchers>(matchers)...);
 			while (1)
-				hidden::mailbox->match(matching);
+				mailbox->match(matching);
 		}
 		catch (stop) {
 		}
@@ -236,10 +234,10 @@ namespace actor {
 			catch (exit) {
 			}
 			catch (...) {
-				hidden::mailbox->mark_dead(error(), self(), std::current_exception());
+				mailbox->mark_dead(error(), self(), std::current_exception());
 				return;
 			}
-			hidden::mailbox->mark_dead(exit(), self());
+			mailbox->mark_dead(exit(), self());
 		};
 		std::thread(callback, std::forward<Func>(func), std::forward<Args>(params)...).detach();
 		return promise.get_future().get();
