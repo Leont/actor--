@@ -56,7 +56,7 @@ namespace actor {
 
 			public:
 			matcher(Types... matchers)
-			: tuple(std::move(matchers)...)
+			: tuple(std::forward<Types>(matchers)...)
 			{}
 
 			template<size_t position = 0> bool match(std::unique_ptr<message>& msg) {
